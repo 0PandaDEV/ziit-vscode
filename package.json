@@ -1,0 +1,69 @@
+{
+  "name": "ziit",
+  "displayName": "Ziit",
+  "description": "The swiss army knive (literally) for coding time tracking.",
+  "publisher": "PandaDEV",
+  "version": "1.0.0",
+  "keywords": [
+    "solid",
+    "vscode",
+    "extension",
+    "api",
+    "visualization",
+    "education",
+    "analytics",
+    "code",
+    "code time",
+    "codetime",
+    "flow",
+    "focus",
+    "metrics",
+    "productivity",
+    "time",
+    "timer",
+    "time tracker",
+    "time tracking",
+    "tracker",
+    "tracking",
+    "worktime"
+  ],
+  "homepage": "https://pandade.net",
+  "bugs": {
+    "url": "https://github.com/0pandadev/ziit-vscode/issues",
+    "email": "contact@pandadev.net"
+  },
+  "icon": "images/solidtime-logo.png",
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "files": [
+    "dist",
+    "images",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "categories": [
+    "Visualization",
+    "Education"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {},
+  "scripts": {
+    "build": "esbuild ./src/extension.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node",
+    "watch": "esbuild ./src/extension.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node --watch"
+  },
+  "devDependencies": {
+    "@types/node": "22.14.0",
+    "@types/vscode": "1.98.0",
+    "esbuild": "0.25.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0pandadev/ziit-vscode.git"
+  },
+  "license": "GPL-3.0"
+}

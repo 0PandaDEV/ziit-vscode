@@ -1,0 +1,35 @@
+name: Package Extension
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Install dependencies
+      run: |
+        npm install
+        npm install -g @vscode/vsce
+        
+    - name: Build & Package
+      run: |
+        npm run build
+        vsce package
+        
+    - name: Upload VSIX
+      uses: actions/upload-artifact@v4
+      with:
+        name: extension
+        path: "*.vsix" 
