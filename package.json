@@ -5,7 +5,7 @@
   "publisher": "PandaDEV",
   "version": "1.0.0",
   "keywords": [
-    "solid",
+    "ziit",
     "vscode",
     "extension",
     "api",
@@ -32,7 +32,7 @@
     "url": "https://github.com/0pandadev/ziit-vscode/issues",
     "email": "contact@pandadev.net"
   },
-  "icon": "images/solidtime-logo.png",
+  "icon": "images/ziit-logo.png",
   "engines": {
     "vscode": "^1.93.0"
   },
