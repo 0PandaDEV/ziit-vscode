@@ -44,6 +44,7 @@ export class HeartbeatManager {
   private lastActivity: number = Date.now();
   private localSummaries: Record<string, LocalSummary> = {};
   private todaySummary: LocalSummary | null = null;
+  private isWindowFocused: boolean = true;
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -76,6 +77,8 @@ export class HeartbeatManager {
       config.get<number>("keystrokeTimeout", 15) * 60 * 1000;
     log(`Keystroke timeout set to ${this.keystrokeTimeout / 60000} minutes`);
 
+    this.isWindowFocused = vscode.window.state.focused;
+
     setInterval(() => {
       if (this.offlineHeartbeats.length > 0 && this.isOnline) {
         this.syncOfflineHeartbeats();
@@ -100,6 +103,12 @@ export class HeartbeatManager {
 
     vscode.workspace.onDidSaveTextDocument(
       this.handleDocumentSave,
+      null,
+      this.context.subscriptions
+    );
+
+    vscode.window.onDidChangeWindowState(
+      this.handleWindowStateChange,
       null,
       this.context.subscriptions
     );
@@ -155,6 +164,25 @@ export class HeartbeatManager {
     if (activeEditor && activeEditor.document === document) {
       this.updateActivity();
       this.sendHeartbeat(true);
+    }
+  };
+
+  private handleWindowStateChange = (windowState: vscode.WindowState): void => {
+    const wasFocused = this.isWindowFocused;
+    this.isWindowFocused = windowState.focused;
+
+    log(`Window focus state changed: ${wasFocused} -> ${this.isWindowFocused}`);
+
+    if (!this.isWindowFocused && wasFocused) {
+      this.updateActivity();
+      if (this.statusBar) {
+        this.statusBar.stopTracking();
+      }
+    } else if (this.isWindowFocused && !wasFocused) {
+      this.lastActivity = Date.now();
+      if (this.statusBar) {
+        this.statusBar.startTracking();
+      }
     }
   };
 
@@ -277,7 +305,9 @@ export class HeartbeatManager {
 
   private isUserActive(): boolean {
     const now = Date.now();
-    return now - this.lastActivity < this.keystrokeTimeout;
+    return (
+      this.isWindowFocused && now - this.lastActivity < this.keystrokeTimeout
+    );
   }
 
   public updateKeystrokeTimeout(timeoutMinutes: number): void {
@@ -314,7 +344,7 @@ export class HeartbeatManager {
 
     try {
       const today = new Date().toISOString().split("T")[0];
-      const url = new URL(`${baseUrl}/api/external/stats/daily`);
+      const url = new URL(`${baseUrl}/api/external/stats`);
       url.searchParams.append("startDate", today);
       log(`Fetching daily summary from: ${url.toString()}`);
 
@@ -689,7 +719,7 @@ export class HeartbeatManager {
               try {
                 resolve(JSON.parse(data));
               } catch (error) {
-                reject(new Error(`Invalid JSON response: ${data}`));
+                reject(new Error(`Invalid JSON response: ${data} + ${error}`));
               }
             } else {
               reject(
