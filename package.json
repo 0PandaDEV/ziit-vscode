@@ -48,10 +48,71 @@
     "Education"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onDebug"
   ],
   "main": "./dist/extension.js",
-  "contributes": {},
+  "contributes": {
+    "commands": [
+      {
+        "command": "ziit.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "ziit.setApiKey",
+        "title": "Ziit: Set API Key"
+      },
+      {
+        "command": "ziit.openDashboard",
+        "title": "Ziit: Open Dashboard"
+      },
+      {
+        "command": "ziit.setKeystrokeTimeout",
+        "title": "Ziit: Set Keystroke Timeout"
+      }
+    ],
+    "configuration": {
+      "title": "Ziit",
+      "properties": {
+        "ziit.apiKey": {
+          "type": "string",
+          "description": "API key for Ziit server authentication"
+        },
+        "ziit.baseUrl": {
+          "type": "string",
+          "default": "https://app.ziit.dev",
+          "description": "Base URL for the Ziit server instance"
+        },
+        "ziit.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable time tracking"
+        },
+        "ziit.keystrokeTimeout": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "maximum": 120,
+          "description": "Maximum time in minutes allowed between durations when calculating your total coding activity. Defaults to 15 minutes like WakaTime."
+        },
+        "ziit.statusBarEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show/hide the status bar item"
+        },
+        "ziit.statusBarCodingActivity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show/hide coding activity in the status bar"
+        },
+        "ziit.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logging"
+        }
+      }
+    }
+  },
   "scripts": {
     "build": "esbuild ./src/extension.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node",
     "dev": "esbuild ./src/extension.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node --watch"
