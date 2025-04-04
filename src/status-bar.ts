@@ -15,7 +15,7 @@ export class StatusBarManager {
     );
     this.statusBarItem.command = "ziit.openDashboard";
     this.statusBarItem.text = "$(clock) 0 hrs 0 mins";
-    this.statusBarItem.tooltip = "Ziit: Time tracked today";
+    this.statusBarItem.tooltip = "Ziit: Today's coding time. Click to visit dashboard";
 
     const config = vscode.workspace.getConfiguration("ziit");
     if (config.get<boolean>("statusBarEnabled", true)) {
