@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
-import { log } from "./log";
+import { log, showOutputChannel } from "./log";
 import { HeartbeatManager } from "./heartbeat";
 import { StatusBarManager } from "./status-bar";
-import { setApiKey } from "./config";
+import { setApiKey, setBaseUrl } from "./config";
 
 export function activate(context: vscode.ExtensionContext) {
   log("Ziit extension activated");
@@ -32,11 +32,17 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  const setBaseUrlCommand = vscode.commands.registerCommand(
+    "ziit.setBaseUrl",
+    () => {
+      setBaseUrl();
+    }
+  );
+
   const setKeystrokeTimeoutCommand = vscode.commands.registerCommand(
     "ziit.setKeystrokeTimeout",
     async () => {
       const config = vscode.workspace.getConfiguration("ziit");
-      const currentTimeout = config.get<number>("keystrokeTimeout", 15);
 
       const options = [
         "5 minutes",
@@ -86,10 +92,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  const helloWorldCommand = vscode.commands.registerCommand(
-    "ziit.helloWorld",
+  const showOutputCommand = vscode.commands.registerCommand(
+    "ziit.showOutput",
     () => {
-      vscode.window.showInformationMessage("Hello from Ziit!");
+      showOutputChannel();
     }
   );
 
@@ -102,8 +108,9 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     openDashboardCommand,
     setApiKeyCommand,
+    setBaseUrlCommand,
     setKeystrokeTimeoutCommand,
-    helloWorldCommand
+    showOutputCommand
   );
 }
 

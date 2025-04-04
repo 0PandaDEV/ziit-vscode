@@ -9,6 +9,10 @@ function getOutputChannel() {
   return outputChannel;
 }
 
+export function showOutputChannel(): void {
+  getOutputChannel().show();
+}
+
 export function log(message: string): void {
   const channel = getOutputChannel();
   channel.appendLine(`[${new Date().toLocaleString()}] ${message}`);

@@ -55,12 +55,12 @@
   "contributes": {
     "commands": [
       {
-        "command": "ziit.helloWorld",
-        "title": "Hello World"
-      },
-      {
         "command": "ziit.setApiKey",
         "title": "Ziit: Set API Key"
+      },
+      {
+        "command": "ziit.setBaseUrl",
+        "title": "Ziit: Set Instance"
       },
       {
         "command": "ziit.openDashboard",
@@ -69,6 +69,10 @@
       {
         "command": "ziit.setKeystrokeTimeout",
         "title": "Ziit: Set Keystroke Timeout"
+      },
+      {
+        "command": "ziit.showOutput",
+        "title": "Ziit: Show Output"
       }
     ],
     "configuration": {
@@ -80,7 +84,7 @@
         },
         "ziit.baseUrl": {
           "type": "string",
-          "default": "https://app.ziit.dev",
+          "default": "https://ziit.example.com",
           "description": "Base URL for the Ziit server instance"
         },
         "ziit.enabled": {
