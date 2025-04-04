@@ -92,7 +92,7 @@ export class StatusBarManager {
       true
     );
     if (showCodingActivity) {
-      this.statusBarItem.text = `$(clock) ${hours} hrs ${minutes} mins coding`;
+      this.statusBarItem.text = `$(clock) ${hours} hrs ${minutes} mins`;
     } else {
       this.statusBarItem.text = `$(clock) ${hours} hrs ${minutes} mins`;
     }
