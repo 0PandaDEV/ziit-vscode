@@ -45,6 +45,8 @@ export class HeartbeatManager {
   private localSummaries: Record<string, LocalSummary> = {};
   private todaySummary: LocalSummary | null = null;
   private isWindowFocused: boolean = true;
+  private localSummaryWatcher: fs.FSWatcher | null = null;
+  private lastFileModification: number = 0;
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -62,6 +64,7 @@ export class HeartbeatManager {
 
     this.loadOfflineHeartbeats();
     this.loadLocalSummaries();
+    this.watchLocalSummaryFile();
 
     this.initialize();
   }
@@ -204,7 +207,10 @@ export class HeartbeatManager {
 
   private updateLocalSummary(secondsToAdd: number): void {
     const today = new Date().toISOString().split("T")[0];
-
+    
+    // Try to read the latest data before updating to avoid overwriting data from other instances
+    this.loadLocalSummaries();
+    
     if (!this.localSummaries[today]) {
       this.localSummaries[today] = {
         date: today,
@@ -217,21 +223,20 @@ export class HeartbeatManager {
     this.localSummaries[today].totalSeconds += secondsToAdd;
     this.localSummaries[today].lastUpdated = Date.now();
 
-    if (this.activeDocumentInfo && this.activeDocumentInfo.file) {
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-      const project = workspaceFolder ? workspaceFolder.name : "unknown";
-
-      if (!this.localSummaries[today].projects[project]) {
-        this.localSummaries[today].projects[project] = 0;
+    if (this.activeDocumentInfo?.file) {
+      const projectFolder = this.getProjectName();
+      if (projectFolder) {
+        if (!this.localSummaries[today].projects[projectFolder]) {
+          this.localSummaries[today].projects[projectFolder] = 0;
+        }
+        this.localSummaries[today].projects[projectFolder] += secondsToAdd;
       }
-
-      this.localSummaries[today].projects[project] += secondsToAdd;
     }
 
     this.todaySummary = this.localSummaries[today];
 
     if (this.statusBar) {
-      this.statusBar.updateTime(this.localSummaries[today].totalSeconds);
+      this.statusBar.updateTime(this.todaySummary.totalSeconds);
     }
 
     this.saveLocalSummaries();
@@ -270,6 +275,7 @@ export class HeartbeatManager {
         JSON.stringify(this.localSummaries),
         "utf8"
       );
+      this.lastFileModification = Date.now();
     } catch (error) {
       log(
         `Error saving local summaries: ${
@@ -295,12 +301,13 @@ export class HeartbeatManager {
       }
     }, this.heartbeatInterval);
 
+    // Sync with server more frequently to ensure all instances have updated data
     setInterval(() => {
       this.fetchDailySummary();
       log(
         `Heartbeat stats - Total: ${this.heartbeatCount}, Success: ${this.successCount}, Failed: ${this.failureCount}, Offline: ${this.offlineHeartbeats.length}`
       );
-    }, 3600000);
+    }, 15 * 60 * 1000); // Check every 15 minutes
   }
 
   private isUserActive(): boolean {
@@ -734,5 +741,34 @@ export class HeartbeatManager {
       req.on("error", reject);
       req.end();
     });
+  }
+
+  private watchLocalSummaryFile(): void {
+    try {
+      log(`Setting up file watcher for ${this.localSummaryPath}`);
+      this.localSummaryWatcher = fs.watch(path.dirname(this.localSummaryPath), (eventType, filename) => {
+        if (filename === path.basename(this.localSummaryPath) && eventType === 'change') {
+          const stat = fs.statSync(this.localSummaryPath);
+          if (stat.mtimeMs > this.lastFileModification + 1000) {
+            log('Local summary file changed by another VS Code instance, reloading...');
+            this.lastFileModification = stat.mtimeMs;
+            this.loadLocalSummaries();
+          }
+        }
+      });
+    } catch (error) {
+      log(`Error setting up file watcher: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private getProjectName(): string | undefined {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    return workspaceFolder ? workspaceFolder.name : undefined;
+  }
+
+  public dispose(): void {
+    if (this.localSummaryWatcher) {
+      this.localSummaryWatcher.close();
+    }
   }
 }

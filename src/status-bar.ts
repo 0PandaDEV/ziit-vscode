@@ -38,9 +38,7 @@ export class StatusBarManager {
 
   private setupUpdateInterval(): void {
     this.updateInterval = setInterval(() => {
-      if (this.isTracking) {
-        this.updateStatusBar();
-      }
+      this.updateStatusBar(true);
     }, 60000);
   }
 
@@ -48,6 +46,7 @@ export class StatusBarManager {
     if (!this.isTracking) {
       this.isTracking = true;
       this.trackingStartTime = Date.now();
+      this.updateStatusBar(true);
       log("Started time tracking");
     }
   }
@@ -59,17 +58,17 @@ export class StatusBarManager {
         (Date.now() - this.trackingStartTime) / 1000
       );
       this.totalSeconds += elapsedSeconds;
-      this.updateStatusBar();
+      this.updateStatusBar(true);
       log(`Stopped time tracking, added ${elapsedSeconds} seconds`);
     }
   }
 
   public updateTime(seconds: number): void {
     this.totalSeconds = seconds;
-    this.updateStatusBar();
+    this.updateStatusBar(true);
   }
 
-  private updateStatusBar(): void {
+  private updateStatusBar(forceUpdate: boolean = false): void {
     const config = vscode.workspace.getConfiguration("ziit");
     if (!config.get<boolean>("statusBarEnabled", true)) {
       return;
@@ -86,6 +85,13 @@ export class StatusBarManager {
 
     const hours = Math.floor(displaySeconds / 3600);
     const minutes = Math.floor((displaySeconds % 3600) / 60);
+
+    if (forceUpdate) {
+      this.statusBarItem.color = new vscode.ThemeColor("statusBarItem.prominentForeground");
+      setTimeout(() => {
+        this.statusBarItem.color = undefined;
+      }, 1000);
+    }
 
     const showCodingActivity = config.get<boolean>(
       "statusBarCodingActivity",

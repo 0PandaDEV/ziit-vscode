@@ -11,6 +11,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarManager);
 
   const heartbeatManager = new HeartbeatManager(context, statusBarManager);
+  context.subscriptions.push(heartbeatManager);
 
   const openDashboardCommand = vscode.commands.registerCommand(
     "ziit.openDashboard",
