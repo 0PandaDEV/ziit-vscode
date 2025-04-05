@@ -208,7 +208,6 @@ export class HeartbeatManager {
   private updateLocalSummary(secondsToAdd: number): void {
     const today = new Date().toISOString().split("T")[0];
     
-    // Try to read the latest data before updating to avoid overwriting data from other instances
     this.loadLocalSummaries();
     
     if (!this.localSummaries[today]) {
@@ -301,13 +300,12 @@ export class HeartbeatManager {
       }
     }, this.heartbeatInterval);
 
-    // Sync with server more frequently to ensure all instances have updated data
     setInterval(() => {
       this.fetchDailySummary();
       log(
         `Heartbeat stats - Total: ${this.heartbeatCount}, Success: ${this.successCount}, Failed: ${this.failureCount}, Offline: ${this.offlineHeartbeats.length}`
       );
-    }, 15 * 60 * 1000); // Check every 15 minutes
+    }, 15 * 60 * 1000);
   }
 
   private isUserActive(): boolean {
