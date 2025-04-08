@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import { log } from "./log";
 
 export class StatusBarManager {
   private statusBarItem: vscode.StatusBarItem;
@@ -11,11 +10,10 @@ export class StatusBarManager {
   constructor() {
     this.statusBarItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left,
-      10
+      100
     );
     this.statusBarItem.command = "ziit.openDashboard";
-    this.statusBarItem.text = "$(clock) 0 hrs 0 mins";
-    this.statusBarItem.tooltip = "Ziit: Today's coding time. Click to visit dashboard";
+    this.statusBarItem.show();
 
     const config = vscode.workspace.getConfiguration("ziit");
     if (config.get<boolean>("statusBarEnabled", true)) {
@@ -47,24 +45,20 @@ export class StatusBarManager {
       this.isTracking = true;
       this.trackingStartTime = Date.now();
       this.updateStatusBar(true);
-      log("Started time tracking");
     }
   }
 
   public stopTracking(): void {
     if (this.isTracking) {
       this.isTracking = false;
-      const elapsedSeconds = Math.floor(
-        (Date.now() - this.trackingStartTime) / 1000
-      );
-      this.totalSeconds += elapsedSeconds;
-      this.updateStatusBar(true);
-      log(`Stopped time tracking, added ${elapsedSeconds} seconds`);
+      const hours = Math.floor(this.totalSeconds / 3600);
+      const minutes = Math.floor((this.totalSeconds % 3600) / 60);
+      this.statusBarItem.text = `$(clock) ${hours} hrs ${minutes} mins`;
     }
   }
 
-  public updateTime(seconds: number): void {
-    this.totalSeconds = seconds;
+  public updateTime(hours: number, minutes: number): void {
+    this.totalSeconds = hours * 3600 + minutes * 60;
     this.updateStatusBar(true);
   }
 

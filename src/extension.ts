@@ -3,6 +3,7 @@ import { log, showOutputChannel } from "./log";
 import { HeartbeatManager } from "./heartbeat";
 import { StatusBarManager } from "./status-bar";
 import { setApiKey, setBaseUrl } from "./config";
+import { sendHeartbeat } from "./heartbeat";
 
 export function activate(context: vscode.ExtensionContext) {
   log("Ziit extension activated");
@@ -12,6 +13,9 @@ export function activate(context: vscode.ExtensionContext) {
 
   const heartbeatManager = new HeartbeatManager(context, statusBarManager);
   context.subscriptions.push(heartbeatManager);
+
+  // Fetch initial time immediately
+  heartbeatManager.fetchDailySummary();
 
   const openDashboardCommand = vscode.commands.registerCommand(
     "ziit.openDashboard",
@@ -100,10 +104,26 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  statusBarManager.startTracking();
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
 
-  vscode.window.onDidChangeActiveTextEditor(() => {
-    statusBarManager.startTracking();
+  const os = process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux";
+  const editorName = vscode.env.appName;
+
+  const disposable = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+    if (!editor) return;
+
+    const filePath = editor.document.uri.fsPath;
+    const project = filePath.split(/[\\/]/).slice(0, -1).join("/");
+    const language = editor.document.languageId;
+
+    await sendHeartbeat({
+      project,
+      language,
+      file: filePath,
+      editor: editorName,
+      os,
+    });
   });
 
   context.subscriptions.push(
@@ -111,7 +131,8 @@ export function activate(context: vscode.ExtensionContext) {
     setApiKeyCommand,
     setBaseUrlCommand,
     setKeystrokeTimeoutCommand,
-    showOutputCommand
+    showOutputCommand,
+    disposable
   );
 }
 
