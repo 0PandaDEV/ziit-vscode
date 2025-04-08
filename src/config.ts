@@ -23,7 +23,7 @@ export async function setBaseUrl(): Promise<void> {
   
   const baseUrl = await vscode.window.showInputBox({
     prompt: "Enter your Ziit instance URL",
-    placeHolder: "https://ziit.pandadev.net",
+    placeHolder: "https://ziit.app",
     value: currentBaseUrl
   });
 
@@ -43,5 +43,5 @@ export function getApiKey(): string | undefined {
 
 export function getBaseUrl(): string {
   const baseUrl = vscode.workspace.getConfiguration("ziit").get<string>("baseUrl");
-  return baseUrl || "https://ziit.pandadev.net";
+  return baseUrl || "https://ziit.app";
 }

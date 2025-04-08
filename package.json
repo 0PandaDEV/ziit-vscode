@@ -84,7 +84,7 @@
         },
         "ziit.baseUrl": {
           "type": "string",
-          "default": "https://ziit.pandadev.net",
+          "default": "https://ziit.app",
           "description": "Base URL for the Ziit server instance"
         },
         "ziit.enabled": {
