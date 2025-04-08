@@ -231,7 +231,7 @@ export class HeartbeatManager {
 
     try {
       const today = new Date().toISOString().split("T")[0];
-      const url = new URL(`${baseUrl}/api/external/stats`);
+      const url = new URL("/api/external/stats", baseUrl);
       url.searchParams.append("startDate", today);
 
       const requestOptions = {
@@ -242,6 +242,7 @@ export class HeartbeatManager {
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
+        protocol: url.protocol
       };
 
       const responseData = await this.makeRequest<DailySummary[]>(requestOptions);
@@ -279,7 +280,7 @@ export class HeartbeatManager {
     try {
       for (const heartbeat of batch) {
         const data = JSON.stringify(heartbeat);
-        const url = new URL(`${baseUrl}/api/external/heartbeats`);
+        const url = new URL("/api/external/heartbeats", baseUrl);
 
         const requestOptions = {
           hostname: url.hostname,
@@ -291,6 +292,7 @@ export class HeartbeatManager {
             "Content-Length": Buffer.byteLength(data),
             Authorization: `Bearer ${apiKey}`,
           },
+          protocol: url.protocol
         };
 
         await new Promise<void>((resolve, reject) => {
@@ -466,13 +468,16 @@ export async function sendHeartbeat(data: HeartbeatData) {
   if (!apiKey || !baseUrl) return;
 
   try {
-    await fetch(`${baseUrl}/api/external/heartbeats`, {
+    const url = new URL("/api/external/heartbeats", baseUrl);
+    await fetch(url.toString(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(data),
+      mode: "cors",
+      credentials: "include"
     });
   } catch (error) {
     log(`Error sending heartbeat: ${error instanceof Error ? error.message : String(error)}`);
