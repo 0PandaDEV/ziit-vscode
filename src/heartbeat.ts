@@ -358,44 +358,42 @@ export class HeartbeatManager {
     this.offlineHeartbeats = [];
 
     try {
-      for (const heartbeat of batch) {
-        const data = JSON.stringify(heartbeat);
-        const url = new URL("/api/external/heartbeats", baseUrl);
+      const data = JSON.stringify(batch);
+      const url = new URL("/api/external/batch", baseUrl);
 
-        const requestOptions = {
-          hostname: url.hostname,
-          port: url.port || (url.protocol === "https:" ? 443 : 80),
-          path: url.pathname + url.search,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Content-Length": Buffer.byteLength(data),
-            Authorization: `Bearer ${apiKey}`,
-          },
-          protocol: url.protocol,
-        };
+      const requestOptions = {
+        hostname: url.hostname,
+        port: url.port || (url.protocol === "https:" ? 443 : 80),
+        path: url.pathname + url.search,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(data),
+          Authorization: `Bearer ${apiKey}`,
+        },
+        protocol: url.protocol,
+      };
 
-        await new Promise<void>((resolve, reject) => {
-          const req = (url.protocol === "https:" ? https : http).request(
-            requestOptions,
-            (res) => {
-              if (
-                res.statusCode &&
-                res.statusCode >= 200 &&
-                res.statusCode < 300
-              ) {
-                resolve();
-              } else {
-                reject(new Error(`Failed with status code: ${res.statusCode}`));
-              }
+      await new Promise<void>((resolve, reject) => {
+        const req = (url.protocol === "https:" ? https : http).request(
+          requestOptions,
+          (res) => {
+            if (
+              res.statusCode &&
+              res.statusCode >= 200 &&
+              res.statusCode < 300
+            ) {
+              resolve();
+            } else {
+              reject(new Error(`Failed with status code: ${res.statusCode}`));
             }
-          );
+          }
+        );
 
-          req.on("error", reject);
-          req.write(data);
-          req.end();
-        });
-      }
+        req.on("error", reject);
+        req.write(data);
+        req.end();
+      });
 
       this.saveOfflineHeartbeats();
       this.fetchDailySummary();
