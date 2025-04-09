@@ -156,7 +156,7 @@ export class HeartbeatManager {
       );
 
       this.activeDocumentInfo = {
-        file: editor.document.uri.fsPath,
+        file: path.basename(editor.document.uri.fsPath),
         language: editor.document.languageId,
       };
 
@@ -171,7 +171,7 @@ export class HeartbeatManager {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document === event.document) {
       this.activeDocumentInfo = {
-        file: event.document.uri.fsPath,
+        file: path.basename(event.document.uri.fsPath),
         language: event.document.languageId,
       };
 
