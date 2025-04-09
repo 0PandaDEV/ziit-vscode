@@ -13,6 +13,7 @@ interface Heartbeat {
   project?: string;
   language?: string;
   file?: string;
+  branch?: string;
   editor: string;
   os: string;
 }
@@ -21,6 +22,7 @@ interface HeartbeatData {
   project: string;
   language: string;
   file: string;
+  branch?: string;
   editor: string;
   os: string;
 }
@@ -30,6 +32,7 @@ interface ParsedHeartbeat {
   project?: string;
   language?: string;
   file?: string;
+  branch?: string;
   editor: string;
   os: string;
 }
@@ -39,6 +42,7 @@ interface RawHeartbeat {
   project?: string;
   language?: string;
   file?: string;
+  branch?: string;
   editor: string;
   os: string;
 }
@@ -409,21 +413,45 @@ export class HeartbeatManager {
     }
   }
 
-  private async sendHeartbeat(force: boolean = false): Promise<void> {
-    const now = Date.now();
+  private async getGitBranch(): Promise<string | undefined> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) return undefined;
 
+    try {
+      const gitExtension = vscode.extensions.getExtension('vscode.git');
+      if (!gitExtension) return undefined;
+
+      const git = gitExtension.exports.getAPI(1);
+      const repository = git.repositories[0];
+      if (!repository) return undefined;
+
+      return repository.state.HEAD?.name;
+    } catch (error) {
+      log(`Error getting git branch: ${error}`);
+      return undefined;
+    }
+  }
+
+  private async sendHeartbeat(force: boolean = false): Promise<void> {
+    if (!this.activeDocumentInfo) {
+      log("No active document info, skipping heartbeat");
+      return;
+    }
+
+    const now = Date.now();
     if (!force && now - this.lastHeartbeat < this.heartbeatInterval) {
+      log("Heartbeat interval not reached, skipping");
       return;
     }
 
     this.lastHeartbeat = now;
     this.heartbeatCount++;
 
-    if (!this.activeDocumentInfo) {
+    const project = this.getProjectName();
+    if (!project) {
+      log("No project name found, skipping heartbeat");
       return;
     }
-
-    this.lastFile = this.activeDocumentInfo.file;
 
     const config = vscode.workspace.getConfiguration("ziit");
     const apiKey = config.get<string>("apiKey");
@@ -434,14 +462,13 @@ export class HeartbeatManager {
       return;
     }
 
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    const project = workspaceFolder ? workspaceFolder.name : "unknown";
-
+    const branch = await this.getGitBranch();
     const heartbeat: Heartbeat = {
       timestamp: new Date().toISOString(),
-      project: project,
+      project,
       language: this.activeDocumentInfo.language,
       file: this.activeDocumentInfo.file,
+      branch,
       editor: vscode.env.appName,
       os:
         process.platform === "win32"
