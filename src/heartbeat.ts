@@ -262,23 +262,8 @@ export class HeartbeatManager {
     }
 
     try {
-      const utcTodayEnd = new Date();
-      utcTodayEnd.setUTCHours(23, 59, 59, 999);
-      const utcTodayStart = new Date(utcTodayEnd);
-      utcTodayStart.setUTCHours(0, 0, 0, 0);
-      const utcYesterdayStart = new Date(utcTodayStart);
-      utcYesterdayStart.setUTCDate(utcYesterdayStart.getUTCDate() - 1);
-      utcYesterdayStart.setUTCHours(0, 0, 0, 0);
-      const utcTomorrowEnd = new Date(utcTodayEnd);
-      utcTomorrowEnd.setUTCDate(utcTomorrowEnd.getUTCDate() + 1);
-      utcTomorrowEnd.setUTCHours(23, 59, 59, 999);
-
-      const startDateStr = utcYesterdayStart.toISOString().split("T")[0];
-      const endDateStr = utcTomorrowEnd.toISOString().split("T")[0];
-
       const url = new URL("/api/external/stats", baseUrl);
-      url.searchParams.append("startDate", startDateStr);
-      url.searchParams.append("endDate", endDateStr);
+      url.searchParams.append("timeRange", "today");
 
       const requestOptions = {
         hostname: url.hostname,

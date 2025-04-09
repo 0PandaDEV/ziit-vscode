@@ -14,7 +14,6 @@ export function activate(context: vscode.ExtensionContext) {
   const heartbeatManager = new HeartbeatManager(context, statusBarManager);
   context.subscriptions.push(heartbeatManager);
 
-  // Fetch initial time immediately
   heartbeatManager.fetchDailySummary();
 
   const openDashboardCommand = vscode.commands.registerCommand(
