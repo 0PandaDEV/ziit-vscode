@@ -17,18 +17,49 @@ interface Heartbeat {
   os: string;
 }
 
-interface DailySummary {
-  date: string;
-  totalSeconds: number;
-  projects: Record<string, number>;
-}
-
 interface HeartbeatData {
   project: string;
   language: string;
   file: string;
   editor: string;
   os: string;
+}
+
+interface ParsedHeartbeat {
+  timestamp: Date;
+  project?: string;
+  language?: string;
+  file?: string;
+  editor: string;
+  os: string;
+}
+
+interface RawHeartbeat {
+  timestamp: string;
+  project?: string;
+  language?: string;
+  file?: string;
+  editor: string;
+  os: string;
+}
+
+const HEARTBEAT_INTERVAL_SECONDS = 30;
+const MAX_HEARTBEAT_DIFF_SECONDS = 300;
+
+function calculateHeartbeatDuration(
+  current: ParsedHeartbeat,
+  previous?: ParsedHeartbeat
+): number {
+  if (!previous) {
+    return HEARTBEAT_INTERVAL_SECONDS;
+  }
+
+  const currentTs = current.timestamp.getTime();
+  const previousTs = previous.timestamp.getTime();
+  const diffSeconds = Math.round((currentTs - previousTs) / 1000);
+  return diffSeconds < MAX_HEARTBEAT_DIFF_SECONDS
+    ? diffSeconds
+    : HEARTBEAT_INTERVAL_SECONDS;
 }
 
 export class HeartbeatManager {
@@ -45,7 +76,7 @@ export class HeartbeatManager {
   private offlineQueuePath: string;
   private isOnline: boolean = true;
   private lastActivity: number = Date.now();
-  private todaySummary: DailySummary | null = null;
+  private todayLocalTotalSeconds: number = 0;
   private isWindowFocused: boolean = true;
 
   constructor(
@@ -70,7 +101,8 @@ export class HeartbeatManager {
     this.syncOfflineHeartbeats();
 
     const config = vscode.workspace.getConfiguration("ziit");
-    this.keystrokeTimeout = config.get<number>("keystrokeTimeout", 15) * 60 * 1000;
+    this.keystrokeTimeout =
+      config.get<number>("keystrokeTimeout", 15) * 60 * 1000;
     this.isWindowFocused = vscode.window.state.focused;
 
     setInterval(() => {
@@ -225,14 +257,28 @@ export class HeartbeatManager {
     const baseUrl = config.get<string>("baseUrl");
     const enabled = config.get<boolean>("enabled");
 
-    if (!enabled || !apiKey || !baseUrl || !this.statusBar) {
+    if (!enabled || !apiKey || !baseUrl) {
       return;
     }
 
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const utcTodayEnd = new Date();
+      utcTodayEnd.setUTCHours(23, 59, 59, 999);
+      const utcTodayStart = new Date(utcTodayEnd);
+      utcTodayStart.setUTCHours(0, 0, 0, 0);
+      const utcYesterdayStart = new Date(utcTodayStart);
+      utcYesterdayStart.setUTCDate(utcYesterdayStart.getUTCDate() - 1);
+      utcYesterdayStart.setUTCHours(0, 0, 0, 0);
+      const utcTomorrowEnd = new Date(utcTodayEnd);
+      utcTomorrowEnd.setUTCDate(utcTomorrowEnd.getUTCDate() + 1);
+      utcTomorrowEnd.setUTCHours(23, 59, 59, 999);
+
+      const startDateStr = utcYesterdayStart.toISOString().split("T")[0];
+      const endDateStr = utcTomorrowEnd.toISOString().split("T")[0];
+
       const url = new URL("/api/external/stats", baseUrl);
-      url.searchParams.append("startDate", today);
+      url.searchParams.append("startDate", startDateStr);
+      url.searchParams.append("endDate", endDateStr);
 
       const requestOptions = {
         hostname: url.hostname,
@@ -242,22 +288,71 @@ export class HeartbeatManager {
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
-        protocol: url.protocol
+        protocol: url.protocol,
       };
 
-      const responseData = await this.makeRequest<DailySummary[]>(requestOptions);
+      const apiResponse = await this.makeRequest<{
+        summaries: any[];
+        heartbeats: RawHeartbeat[];
+      }>(requestOptions);
       this.isOnline = true;
 
-      if (responseData && responseData.length > 0) {
-        const todaySummary = responseData[0];
-        this.todaySummary = todaySummary;
+      if (apiResponse && apiResponse.heartbeats) {
+        const allFetchedHeartbeats: ParsedHeartbeat[] = apiResponse.heartbeats
+          .map((hb) => ({ ...hb, timestamp: new Date(hb.timestamp) }))
+          .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+        const localNow = new Date();
+        const localTodayStart = new Date(localNow);
+        localTodayStart.setHours(0, 0, 0, 0);
+        const localTodayEnd = new Date(localNow);
+        localTodayEnd.setHours(23, 59, 59, 999);
+
+        const todaysLocalHeartbeats = allFetchedHeartbeats.filter((hb) => {
+          const ts = hb.timestamp as Date;
+          return ts >= localTodayStart && ts <= localTodayEnd;
+        });
+
+        let localDayTotalSeconds = 0;
+
+        const heartbeatsByProject: Record<string, ParsedHeartbeat[]> = {};
+        todaysLocalHeartbeats.forEach((hb) => {
+          const projectKey = hb.project || "unknown";
+          if (!heartbeatsByProject[projectKey]) {
+            heartbeatsByProject[projectKey] = [];
+          }
+          heartbeatsByProject[projectKey].push(hb);
+        });
+
+        for (const projectKey in heartbeatsByProject) {
+          const projectBeats = heartbeatsByProject[projectKey];
+          for (let i = 0; i < projectBeats.length; i++) {
+            const currentBeat = projectBeats[i];
+            const previousBeat = i > 0 ? projectBeats[i - 1] : undefined;
+
+            localDayTotalSeconds += calculateHeartbeatDuration(
+              currentBeat,
+              previousBeat
+            );
+          }
+        }
+
+        this.todayLocalTotalSeconds = localDayTotalSeconds;
+
         if (this.statusBar) {
-          this.statusBar.updateTime(Math.floor(todaySummary.totalSeconds / 3600), Math.floor((todaySummary.totalSeconds % 3600) / 60));
+          const hours = Math.floor(this.todayLocalTotalSeconds / 3600);
+          const minutes = Math.floor((this.todayLocalTotalSeconds % 3600) / 60);
+          this.statusBar.updateTime(hours, minutes);
+        }
+      } else {
+        this.todayLocalTotalSeconds = 0;
+        if (this.statusBar) {
+          this.statusBar.updateTime(0, 0);
         }
       }
     } catch (error) {
       this.isOnline = false;
-      log(`Error fetching daily summary: ${error instanceof Error ? error.message : String(error)}`);
+      log(`Error fetching daily summary: ${error}`);
     }
   }
 
@@ -292,14 +387,18 @@ export class HeartbeatManager {
             "Content-Length": Buffer.byteLength(data),
             Authorization: `Bearer ${apiKey}`,
           },
-          protocol: url.protocol
+          protocol: url.protocol,
         };
 
         await new Promise<void>((resolve, reject) => {
           const req = (url.protocol === "https:" ? https : http).request(
             requestOptions,
             (res) => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              if (
+                res.statusCode &&
+                res.statusCode >= 200 &&
+                res.statusCode < 300
+              ) {
                 resolve();
               } else {
                 reject(new Error(`Failed with status code: ${res.statusCode}`));
@@ -316,7 +415,11 @@ export class HeartbeatManager {
       this.saveOfflineHeartbeats();
       this.fetchDailySummary();
     } catch (error) {
-      log(`Error syncing offline heartbeats: ${error instanceof Error ? error.message : String(error)}`);
+      log(
+        `Error syncing offline heartbeats: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
       this.offlineHeartbeats = [...this.offlineHeartbeats, ...batch];
       this.saveOfflineHeartbeats();
       this.isOnline = false;
@@ -357,7 +460,12 @@ export class HeartbeatManager {
       language: this.activeDocumentInfo.language,
       file: this.activeDocumentInfo.file,
       editor: vscode.env.appName,
-      os: process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'macOS' : 'Linux'
+      os:
+        process.platform === "win32"
+          ? "Windows"
+          : process.platform === "darwin"
+          ? "macOS"
+          : "Linux",
     };
 
     if (!this.isOnline) {
@@ -386,7 +494,11 @@ export class HeartbeatManager {
         const req = (url.protocol === "https:" ? https : http).request(
           requestOptions,
           (res) => {
-            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            if (
+              res.statusCode &&
+              res.statusCode >= 200 &&
+              res.statusCode < 300
+            ) {
               this.isOnline = true;
               resolve();
             } else {
@@ -403,7 +515,11 @@ export class HeartbeatManager {
       this.isOnline = false;
       this.offlineHeartbeats.push(heartbeat);
       this.saveOfflineHeartbeats();
-      log(`Failed to send heartbeat: ${error instanceof Error ? error.message : String(error)}`);
+      log(
+        `Failed to send heartbeat: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
@@ -414,38 +530,67 @@ export class HeartbeatManager {
         this.offlineHeartbeats = JSON.parse(data);
       }
     } catch (error) {
-      log(`Error loading offline heartbeats: ${error instanceof Error ? error.message : String(error)}`);
+      log(
+        `Error loading offline heartbeats: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
       this.offlineHeartbeats = [];
     }
   }
 
   private saveOfflineHeartbeats(): void {
     try {
-      fs.writeFileSync(this.offlineQueuePath, JSON.stringify(this.offlineHeartbeats), "utf8");
+      fs.writeFileSync(
+        this.offlineQueuePath,
+        JSON.stringify(this.offlineHeartbeats),
+        "utf8"
+      );
     } catch (error) {
-      log(`Error saving offline heartbeats: ${error instanceof Error ? error.message : String(error)}`);
+      log(
+        `Error saving offline heartbeats: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
   private makeRequest<T>(options: http.RequestOptions): Promise<T> {
     return new Promise((resolve, reject) => {
-      const req = (options.protocol === "https:" ? https : http).request(options, (res) => {
-        let data = "";
-        res.on("data", (chunk) => {
-          data += chunk;
-        });
-        res.on("end", () => {
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              resolve(JSON.parse(data));
-            } catch (error) {
-              reject(new Error(`Invalid JSON response: ${error instanceof Error ? error.message : String(error)}`));
+      const req = (options.protocol === "https:" ? https : http).request(
+        options,
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => {
+            data += chunk;
+          });
+          res.on("end", () => {
+            if (
+              res.statusCode &&
+              res.statusCode >= 200 &&
+              res.statusCode < 300
+            ) {
+              try {
+                resolve(JSON.parse(data));
+              } catch (error) {
+                reject(
+                  new Error(
+                    `Invalid JSON response: ${
+                      error instanceof Error ? error.message : String(error)
+                    }`
+                  )
+                );
+              }
+            } else {
+              reject(
+                new Error(
+                  `Request failed with status code ${res.statusCode}: ${data}`
+                )
+              );
             }
-          } else {
-            reject(new Error(`Request failed with status code ${res.statusCode}: ${data}`));
-          }
-        });
-      });
+          });
+        }
+      );
       req.on("error", reject);
       req.end();
     });
@@ -477,9 +622,13 @@ export async function sendHeartbeat(data: HeartbeatData) {
       },
       body: JSON.stringify(data),
       mode: "cors",
-      credentials: "include"
+      credentials: "include",
     });
   } catch (error) {
-    log(`Error sending heartbeat: ${error instanceof Error ? error.message : String(error)}`);
+    log(
+      `Error sending heartbeat: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 }
