@@ -26,6 +26,13 @@ Track your coding time with [Ziit](https://github.com/0pandadev/ziit) directly i
 - OS & editor information tracking
 - Real-time data sync
 
+## Commands
+
+- `ziit.setApiKey`: Set your Ziit API key
+- `ziit.setBaseUrl`: Set your Ziit instance URL
+- `ziit.openDashboard`: Open your Ziit dashboard
+- `ziit.showOutput`: Show Ziit output channel
+
 ## Links
 
 - [Ziit Website](https://ziit.app)
