@@ -65,7 +65,7 @@ export async function fetchUserSettings(heartbeatManager?: any): Promise<void> {
   }
   
   try {
-    const url = new URL("/api/user", baseUrl);
+    const url = new URL("/api/external/user", baseUrl);
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: {

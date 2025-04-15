@@ -448,7 +448,6 @@ export class HeartbeatManager {
 
     const now = Date.now();
     if (!force && now - this.lastHeartbeat < this.heartbeatInterval) {
-      log("Heartbeat interval not reached, skipping");
       return;
     }
 
