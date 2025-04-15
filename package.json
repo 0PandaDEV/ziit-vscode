@@ -27,7 +27,7 @@
     "tracking",
     "worktime"
   ],
-  "homepage": "https://pandade.net",
+  "homepage": "https://pandadev.net",
   "bugs": {
     "url": "https://github.com/0pandadev/ziit-vscode/issues",
     "email": "contact@pandadev.net"
@@ -67,10 +67,6 @@
         "title": "Ziit: Open Dashboard"
       },
       {
-        "command": "ziit.setKeystrokeTimeout",
-        "title": "Ziit: Set Keystroke Timeout"
-      },
-      {
         "command": "ziit.showOutput",
         "title": "Ziit: Show Output"
       }
@@ -92,13 +88,6 @@
           "default": true,
           "description": "Enable/disable time tracking"
         },
-        "ziit.keystrokeTimeout": {
-          "type": "number",
-          "default": 15,
-          "minimum": 1,
-          "maximum": 120,
-          "description": "Maximum time in minutes allowed between durations when calculating your total coding activity. Defaults to 15 minutes like WakaTime."
-        },
         "ziit.statusBarEnabled": {
           "type": "boolean",
           "default": true,
@@ -113,6 +102,10 @@
           "type": "boolean",
           "default": false,
           "description": "Enable debug logging"
+        },
+        "ziit.keystrokeTimeout": {
+          "type": "number",
+          "description": "Inactivity timeout in minutes before stopping time tracking"
         }
       }
     }

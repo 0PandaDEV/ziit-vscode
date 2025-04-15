@@ -43,59 +43,6 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  const setKeystrokeTimeoutCommand = vscode.commands.registerCommand(
-    "ziit.setKeystrokeTimeout",
-    async () => {
-      const config = vscode.workspace.getConfiguration("ziit");
-
-      const options = [
-        "5 minutes",
-        "15 minutes (default)",
-        "30 minutes",
-        "60 minutes",
-        "120 minutes",
-      ];
-
-      const selection = await vscode.window.showQuickPick(options, {
-        placeHolder:
-          "Select keystroke timeout (how long before we stop counting you as coding)",
-        canPickMany: false,
-      });
-
-      if (!selection) {
-        return;
-      }
-
-      let newTimeout: number;
-      switch (selection) {
-        case "5 minutes":
-          newTimeout = 5;
-          break;
-        case "15 minutes (default)":
-          newTimeout = 15;
-          break;
-        case "30 minutes":
-          newTimeout = 30;
-          break;
-        case "60 minutes":
-          newTimeout = 60;
-          break;
-        case "120 minutes":
-          newTimeout = 120;
-          break;
-        default:
-          newTimeout = 15;
-      }
-
-      await config.update("keystrokeTimeout", newTimeout, true);
-      vscode.window.showInformationMessage(
-        `Keystroke timeout set to ${newTimeout} minutes`
-      );
-
-      heartbeatManager.updateKeystrokeTimeout(newTimeout);
-    }
-  );
-
   const showOutputCommand = vscode.commands.registerCommand(
     "ziit.showOutput",
     () => {
@@ -129,7 +76,6 @@ export function activate(context: vscode.ExtensionContext) {
     openDashboardCommand,
     setApiKeyCommand,
     setBaseUrlCommand,
-    setKeystrokeTimeoutCommand,
     showOutputCommand,
     disposable
   );

@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StatusBarManager } from "./status-bar";
-import { getApiKey, getBaseUrl } from "./config";
+import { getApiKey, getBaseUrl, fetchUserSettings } from "./config";
 
 interface Heartbeat {
   timestamp: string;
@@ -70,7 +70,6 @@ export class HeartbeatManager {
   private lastHeartbeat: number = 0;
   private lastFile: string = "";
   private heartbeatInterval: number = 120000;
-  private keystrokeTimeout: number = 15 * 60 * 1000;
   private activeDocumentInfo: { file: string; language: string } | null = null;
   private statusBar: StatusBarManager | null = null;
   private heartbeatCount: number = 0;
@@ -82,6 +81,7 @@ export class HeartbeatManager {
   private lastActivity: number = Date.now();
   private todayLocalTotalSeconds: number = 0;
   private isWindowFocused: boolean = true;
+  private keystrokeTimeout: number | undefined;
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -103,15 +103,15 @@ export class HeartbeatManager {
     this.registerEventListeners();
     this.scheduleHeartbeat();
     this.syncOfflineHeartbeats();
-
-    const config = vscode.workspace.getConfiguration("ziit");
-    this.keystrokeTimeout =
-      config.get<number>("keystrokeTimeout", 15) * 60 * 1000;
+    
     this.isWindowFocused = vscode.window.state.focused;
+    
+    fetchUserSettings(this);
 
     setInterval(() => {
       this.syncOfflineHeartbeats();
       this.fetchDailySummary();
+      fetchUserSettings(this);
     }, 30000);
   }
 
@@ -245,14 +245,22 @@ export class HeartbeatManager {
 
   private isUserActive(): boolean {
     const now = Date.now();
+    if (this.keystrokeTimeout === undefined) {
+      return this.isWindowFocused;
+    }
     return (
       this.isWindowFocused && now - this.lastActivity < this.keystrokeTimeout
     );
   }
 
-  public updateKeystrokeTimeout(timeoutMinutes: number): void {
-    this.keystrokeTimeout = timeoutMinutes * 60 * 1000;
-    log(`Keystroke timeout updated to ${timeoutMinutes} minutes`);
+  public updateKeystrokeTimeout(timeoutMinutes: number | undefined): void {
+    if (timeoutMinutes !== undefined) {
+      this.keystrokeTimeout = timeoutMinutes * 60 * 1000;
+      log(`Keystroke timeout updated to ${timeoutMinutes} minutes`);
+    } else {
+      this.keystrokeTimeout = undefined;
+      log("Keystroke timeout cleared");
+    }
   }
 
   public async fetchDailySummary(): Promise<void> {
