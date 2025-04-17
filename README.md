@@ -13,9 +13,14 @@ Track your coding time with [Ziit](https://github.com/0pandadev/ziit) directly i
 
 ## Setup
 
-1. Open VSCode settings
-2. Set your Ziit API key
-3. Set your Ziit instance URL (default: <https://ziit.app>)
+1. Install the Ziit extension from the VS Code marketplace
+2. Open VS Code and press <kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> (or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> on Windows)
+3. Type "Ziit: Set Instance" and press Enter
+4. Paste your Ziit instance URL
+5. Open VS Code and press <kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> (or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> on Windows)
+6. Type "Ziit: Set API Key" and press Enter
+7. Paste your API key and press Enter
+8. Begin coding, and your time will be tracked automatically!
 
 ## Features
 
