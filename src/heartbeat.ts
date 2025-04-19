@@ -27,45 +27,6 @@ interface HeartbeatData {
   os: string;
 }
 
-interface ParsedHeartbeat {
-  timestamp: Date;
-  project?: string;
-  language?: string;
-  file?: string;
-  branch?: string;
-  editor: string;
-  os: string;
-}
-
-interface RawHeartbeat {
-  timestamp: string;
-  project?: string;
-  language?: string;
-  file?: string;
-  branch?: string;
-  editor: string;
-  os: string;
-}
-
-const HEARTBEAT_INTERVAL_SECONDS = 30;
-const MAX_HEARTBEAT_DIFF_SECONDS = 300;
-
-function calculateHeartbeatDuration(
-  current: ParsedHeartbeat,
-  previous?: ParsedHeartbeat
-): number {
-  if (!previous) {
-    return HEARTBEAT_INTERVAL_SECONDS;
-  }
-
-  const currentTs = current.timestamp.getTime();
-  const previousTs = previous.timestamp.getTime();
-  const diffSeconds = Math.round((currentTs - previousTs) / 1000);
-  return diffSeconds < MAX_HEARTBEAT_DIFF_SECONDS
-    ? diffSeconds
-    : HEARTBEAT_INTERVAL_SECONDS;
-}
-
 export class HeartbeatManager {
   private lastHeartbeat: number = 0;
   private lastFile: string = "";
@@ -289,52 +250,22 @@ export class HeartbeatManager {
       };
 
       const apiResponse = await this.makeRequest<{
-        summaries: any[];
-        heartbeats: RawHeartbeat[];
+        summaries: Array<{
+          date: string;
+          totalSeconds: number;
+          projects: Record<string, number>;
+          languages: Record<string, number>;
+          editors: Record<string, number>;
+          os: Record<string, number>;
+          hourlyData: Array<{ seconds: number }>;
+        }>;
+        timezone: string;
       }>(requestOptions);
       this.isOnline = true;
 
-      if (apiResponse && apiResponse.heartbeats) {
-        const allFetchedHeartbeats: ParsedHeartbeat[] = apiResponse.heartbeats
-          .map((hb) => ({ ...hb, timestamp: new Date(hb.timestamp) }))
-          .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-        const localNow = new Date();
-        const localTodayStart = new Date(localNow);
-        localTodayStart.setHours(0, 0, 0, 0);
-        const localTodayEnd = new Date(localNow);
-        localTodayEnd.setHours(23, 59, 59, 999);
-
-        const todaysLocalHeartbeats = allFetchedHeartbeats.filter((hb) => {
-          const ts = hb.timestamp as Date;
-          return ts >= localTodayStart && ts <= localTodayEnd;
-        });
-
-        let localDayTotalSeconds = 0;
-
-        const heartbeatsByProject: Record<string, ParsedHeartbeat[]> = {};
-        todaysLocalHeartbeats.forEach((hb) => {
-          const projectKey = hb.project || "unknown";
-          if (!heartbeatsByProject[projectKey]) {
-            heartbeatsByProject[projectKey] = [];
-          }
-          heartbeatsByProject[projectKey].push(hb);
-        });
-
-        for (const projectKey in heartbeatsByProject) {
-          const projectBeats = heartbeatsByProject[projectKey];
-          for (let i = 0; i < projectBeats.length; i++) {
-            const currentBeat = projectBeats[i];
-            const previousBeat = i > 0 ? projectBeats[i - 1] : undefined;
-
-            localDayTotalSeconds += calculateHeartbeatDuration(
-              currentBeat,
-              previousBeat
-            );
-          }
-        }
-
-        this.todayLocalTotalSeconds = localDayTotalSeconds;
+      if (apiResponse && apiResponse.summaries && apiResponse.summaries.length > 0) {
+        const todaySummary = apiResponse.summaries[0];
+        this.todayLocalTotalSeconds = todaySummary.totalSeconds;
 
         if (this.statusBar) {
           const hours = Math.floor(this.todayLocalTotalSeconds / 3600);
