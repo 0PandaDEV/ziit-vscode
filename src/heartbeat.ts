@@ -285,9 +285,14 @@ export class HeartbeatManager {
   }
 
   private async syncOfflineHeartbeats(): Promise<void> {
-    if (!this.isOnline || this.offlineHeartbeats.length === 0) {
-      return;
-    }
+    if (!this.isOnline || this.offlineHeartbeats.length === 0) return;
+
+    this.offlineHeartbeats = this.offlineHeartbeats.map(heartbeat => ({
+      ...heartbeat,
+      timestamp: typeof heartbeat.timestamp === 'number' 
+        ? new Date(heartbeat.timestamp).toISOString() 
+        : heartbeat.timestamp
+    }));
 
     const config = vscode.workspace.getConfiguration("ziit");
     const apiKey = config.get<string>("apiKey");
@@ -372,16 +377,18 @@ export class HeartbeatManager {
   }
 
   private async sendHeartbeat(force: boolean = false): Promise<void> {
-    if (!this.activeDocumentInfo) {
-      log("No active document info, skipping heartbeat");
-      return;
-    }
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor || !this.activeDocumentInfo) return;
 
     const now = Date.now();
-    if (!force && now - this.lastHeartbeat < this.heartbeatInterval) {
+    const fileChanged = this.lastFile !== activeEditor.document.uri.fsPath;
+    const timeThresholdPassed = now - this.lastHeartbeat >= this.heartbeatInterval;
+
+    if (!force && !fileChanged && !timeThresholdPassed) {
       return;
     }
 
+    this.lastFile = activeEditor.document.uri.fsPath;
     this.lastHeartbeat = now;
     this.heartbeatCount++;
 
@@ -560,6 +567,11 @@ export async function sendHeartbeat(data: HeartbeatData) {
 
   if (!apiKey || !baseUrl) return;
 
+  const heartbeatData = {
+    ...data,
+    timestamp: new Date().toISOString()
+  };
+
   try {
     const url = new URL("/api/external/heartbeats", baseUrl);
     await fetch(url.toString(), {
@@ -568,9 +580,8 @@ export async function sendHeartbeat(data: HeartbeatData) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(heartbeatData),
       mode: "cors",
-      credentials: "include",
     });
   } catch (error) {
     log(
