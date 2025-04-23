@@ -2,9 +2,21 @@
    <img src="https://github.com/user-attachments/assets/5784653d-9e8e-4b82-b891-2d839c4384c7"/>
 </p>
 
-# Ziit for VSCode
+<h3 align="center">
+   The VS Code extension for the time tracking software Ziit.
+</h3>
 
-Track your coding time with [Ziit](https://github.com/0pandadev/ziit) directly in VSCode. This extension integrates with your Ziit instance to provide seamless time tracking.
+<div align="center">
+    <a href="https://ziit.app">Website</a>
+    <span> • </span>
+    <a href="https://github.com/0pandadev/ziit">Ziit Github</a>
+    <span> • </span>
+    <a href="#setup">Setup</a>
+    <span> • </span>
+    <a href="https://github.com/0pandadev/ziit-vscode/issues">Issues</a>
+    <span> • </span>
+    <a href="https://discord.gg/Y7SbYphVw9">Discord</a>
+</div>
 
 ## Installation
 
@@ -22,25 +34,9 @@ Track your coding time with [Ziit](https://github.com/0pandadev/ziit) directly i
 7. Paste your API key and press Enter
 8. Begin coding, and your time will be tracked automatically!
 
-## Features
-
-- Automatic time tracking
-- Project detection
-- Git branch tracking
-- Language detection
-- OS & editor information tracking
-- Real-time data sync
-
 ## Commands
 
 - `ziit.setApiKey`: Set your Ziit API key
 - `ziit.setBaseUrl`: Set your Ziit instance URL
 - `ziit.openDashboard`: Open your Ziit dashboard
 - `ziit.showOutput`: Show Ziit output channel
-
-## Links
-
-- [Ziit Website](https://ziit.app)
-- [GitHub Repository](https://github.com/0PandaDEV/ziit-vscode)
-- [Report Issues](https://github.com/0pandadev/ziit-vscode/issues)
-- [Discord Community](https://discord.gg/Y7SbYphVw9)
