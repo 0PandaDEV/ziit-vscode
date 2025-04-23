@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -31,8 +31,46 @@ jobs:
           npm run build
           vsce package
       
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: "*.vsix"
+          retention-days: 1
+
+  publish-vscode:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download VSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: extension
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+      
       - name: Publish to VS Code Marketplace
-        run: vsce publish -p ${{ secrets.VSCE_PAT }}
+        run: vsce publish -p ${{ secrets.VSCE_PAT }} --packagePath *.vsix
+  
+  publish-ovsx:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download VSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: extension
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       
       - name: Publish to Open VSX Registry
-        run: npx ovsx publish -p ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish *.vsix -p ${{ secrets.OVSX_PAT }}
