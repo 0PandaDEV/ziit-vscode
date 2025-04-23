@@ -237,6 +237,12 @@ export class HeartbeatManager {
     try {
       const url = new URL("/api/external/stats", baseUrl);
       url.searchParams.append("timeRange", "today");
+      
+      const now = new Date();
+      const timezoneOffsetMinutes = now.getTimezoneOffset();
+      const timezoneOffsetSeconds = timezoneOffsetMinutes * 60;
+      url.searchParams.append("midnightOffsetSeconds", timezoneOffsetSeconds.toString());
+      url.searchParams.append("t", Date.now().toString());
 
       const requestOptions = {
         hostname: url.hostname,
