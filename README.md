@@ -2,8 +2,6 @@
    <img src="https://github.com/user-attachments/assets/5784653d-9e8e-4b82-b891-2d839c4384c7"/>
 </p>
 
-# Ziit for VSCode
-
 Track your coding time with [Ziit](https://github.com/0pandadev/ziit) directly in VSCode. This extension integrates with your Ziit instance to provide seamless time tracking.
 
 ## Installation
