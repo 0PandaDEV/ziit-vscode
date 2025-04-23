@@ -13,6 +13,7 @@ export class StatusBarManager {
       100
     );
     this.statusBarItem.command = "ziit.openDashboard";
+    this.statusBarItem.tooltip = "Ziit: Today's coding time. Click to open dashboard."
     this.statusBarItem.show();
 
     const config = vscode.workspace.getConfiguration("ziit");
