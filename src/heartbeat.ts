@@ -573,8 +573,13 @@ export async function sendHeartbeat(data: HeartbeatData) {
 
   if (!apiKey || !baseUrl) return;
 
+  const file = data.file ? path.basename(data.file) : undefined;
+  const project = data.project ? path.basename(data.project) : undefined;
+
   const heartbeatData = {
     ...data,
+    project,
+    file,
     timestamp: new Date().toISOString()
   };
 
