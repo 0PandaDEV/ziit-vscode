@@ -13,7 +13,8 @@ export class StatusBarManager {
       100
     );
     this.statusBarItem.command = "ziit.openDashboard";
-    this.statusBarItem.tooltip = "Ziit: Today's coding time. Click to open dashboard."
+    this.statusBarItem.tooltip =
+      "Ziit: Today's coding time. Click to open dashboard.";
     this.statusBarItem.show();
 
     const config = vscode.workspace.getConfiguration("ziit");
@@ -82,7 +83,9 @@ export class StatusBarManager {
     const minutes = Math.floor((displaySeconds % 3600) / 60);
 
     if (forceUpdate) {
-      this.statusBarItem.color = new vscode.ThemeColor("statusBarItem.prominentForeground");
+      this.statusBarItem.color = new vscode.ThemeColor(
+        "statusBarItem.prominentForeground"
+      );
       setTimeout(() => {
         this.statusBarItem.color = undefined;
       }, 1000);
