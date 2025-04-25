@@ -6,22 +6,13 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StatusBarManager } from "./status-bar";
-import { getApiKey, getBaseUrl, fetchUserSettings } from "./config";
+import { fetchUserSettings } from "./config";
 
 interface Heartbeat {
   timestamp: string;
   project?: string;
   language?: string;
   file?: string;
-  branch?: string;
-  editor: string;
-  os: string;
-}
-
-interface HeartbeatData {
-  project: string;
-  language: string;
-  file: string;
   branch?: string;
   editor: string;
   os: string;
@@ -64,9 +55,9 @@ export class HeartbeatManager {
     this.registerEventListeners();
     this.scheduleHeartbeat();
     this.syncOfflineHeartbeats();
-    
+
     this.isWindowFocused = vscode.window.state.focused;
-    
+
     fetchUserSettings(this);
 
     setInterval(() => {
@@ -237,11 +228,14 @@ export class HeartbeatManager {
     try {
       const url = new URL("/api/external/stats", baseUrl);
       url.searchParams.append("timeRange", "today");
-      
+
       const now = new Date();
       const timezoneOffsetMinutes = now.getTimezoneOffset();
       const timezoneOffsetSeconds = timezoneOffsetMinutes * 60;
-      url.searchParams.append("midnightOffsetSeconds", timezoneOffsetSeconds.toString());
+      url.searchParams.append(
+        "midnightOffsetSeconds",
+        timezoneOffsetSeconds.toString()
+      );
       url.searchParams.append("t", Date.now().toString());
 
       const requestOptions = {
@@ -269,7 +263,11 @@ export class HeartbeatManager {
       }>(requestOptions);
       this.isOnline = true;
 
-      if (apiResponse && apiResponse.summaries && apiResponse.summaries.length > 0) {
+      if (
+        apiResponse &&
+        apiResponse.summaries &&
+        apiResponse.summaries.length > 0
+      ) {
         const todaySummary = apiResponse.summaries[0];
         this.todayLocalTotalSeconds = todaySummary.totalSeconds;
 
@@ -293,11 +291,12 @@ export class HeartbeatManager {
   private async syncOfflineHeartbeats(): Promise<void> {
     if (!this.isOnline || this.offlineHeartbeats.length === 0) return;
 
-    this.offlineHeartbeats = this.offlineHeartbeats.map(heartbeat => ({
+    this.offlineHeartbeats = this.offlineHeartbeats.map((heartbeat) => ({
       ...heartbeat,
-      timestamp: typeof heartbeat.timestamp === 'number' 
-        ? new Date(heartbeat.timestamp).toISOString() 
-        : heartbeat.timestamp
+      timestamp:
+        typeof heartbeat.timestamp === "number"
+          ? new Date(heartbeat.timestamp).toISOString()
+          : heartbeat.timestamp,
     }));
 
     const config = vscode.workspace.getConfiguration("ziit");
@@ -368,7 +367,7 @@ export class HeartbeatManager {
     if (!workspaceFolders || workspaceFolders.length === 0) return undefined;
 
     try {
-      const gitExtension = vscode.extensions.getExtension('vscode.git');
+      const gitExtension = vscode.extensions.getExtension("vscode.git");
       if (!gitExtension) return undefined;
 
       const git = gitExtension.exports.getAPI(1);
@@ -388,7 +387,8 @@ export class HeartbeatManager {
 
     const now = Date.now();
     const fileChanged = this.lastFile !== activeEditor.document.uri.fsPath;
-    const timeThresholdPassed = now - this.lastHeartbeat >= this.heartbeatInterval;
+    const timeThresholdPassed =
+      now - this.lastHeartbeat >= this.heartbeatInterval;
 
     if (!force && !fileChanged && !timeThresholdPassed) {
       return;
@@ -564,41 +564,5 @@ export class HeartbeatManager {
 
   public dispose(): void {
     this.saveOfflineHeartbeats();
-  }
-}
-
-export async function sendHeartbeat(data: HeartbeatData) {
-  const apiKey = getApiKey();
-  const baseUrl = getBaseUrl();
-
-  if (!apiKey || !baseUrl) return;
-
-  const file = data.file ? path.basename(data.file) : undefined;
-  const project = data.project ? path.basename(data.project) : undefined;
-
-  const heartbeatData = {
-    ...data,
-    project,
-    file,
-    timestamp: new Date().toISOString()
-  };
-
-  try {
-    const url = new URL("/api/external/heartbeats", baseUrl);
-    await fetch(url.toString(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(heartbeatData),
-      mode: "cors",
-    });
-  } catch (error) {
-    log(
-      `Error sending heartbeat: ${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
   }
 }
