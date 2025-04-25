@@ -3,7 +3,6 @@ import { log, showOutputChannel } from "./log";
 import { HeartbeatManager } from "./heartbeat";
 import { StatusBarManager } from "./status-bar";
 import { setApiKey, setBaseUrl } from "./config";
-import { sendHeartbeat } from "./heartbeat";
 
 export function activate(context: vscode.ExtensionContext) {
   log("Ziit extension activated");
@@ -50,34 +49,11 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) return;
-
-  const os = process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux";
-  const editorName = vscode.env.appName;
-
-  const disposable = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-    if (!editor) return;
-
-    const filePath = editor.document.uri.fsPath;
-    const project = filePath.split(/[\\/]/).slice(0, -1).join("/");
-    const language = editor.document.languageId;
-
-    await sendHeartbeat({
-      project,
-      language,
-      file: filePath,
-      editor: editorName,
-      os,
-    });
-  });
-
   context.subscriptions.push(
     openDashboardCommand,
     setApiKeyCommand,
     setBaseUrlCommand,
-    showOutputCommand,
-    disposable
+    showOutputCommand
   );
 }
 
