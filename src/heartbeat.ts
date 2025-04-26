@@ -398,7 +398,7 @@ export class HeartbeatManager {
     this.lastHeartbeat = now;
     this.heartbeatCount++;
 
-    const project = this.getProjectName();
+    const project = await this.getProjectName();
     if (!project) {
       log("No project name found, skipping heartbeat");
       return;
@@ -557,9 +557,74 @@ export class HeartbeatManager {
     });
   }
 
-  private getProjectName(): string | undefined {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    return workspaceFolder ? workspaceFolder.name : undefined;
+  private async getProjectName(): Promise<string | undefined> {
+    try {
+      const gitExtension = vscode.extensions.getExtension<{
+        getAPI(version: number): any;
+      }>("vscode.git");
+      if (!gitExtension) return undefined;
+
+      if (!gitExtension.isActive) {
+        await gitExtension.activate();
+      }
+
+      const git = gitExtension.exports.getAPI(1);
+      if (!git || git.repositories.length === 0) return undefined;
+
+      const repository = git.repositories[0];
+      const remotes = repository.state.remotes;
+
+      const getProjectNameFromUrl = (url: string): string | undefined => {
+        try {
+          const lastSeparator = Math.max(
+            url.lastIndexOf("/"),
+            url.lastIndexOf(":")
+          );
+          if (lastSeparator === -1) return undefined;
+          let name = url.substring(lastSeparator + 1);
+          if (name.endsWith(".git")) name = name.slice(0, -4);
+          return name || undefined;
+        } catch (e) {
+          log(`Error parsing git remote URL ${url}: ${e}`);
+          return undefined;
+        }
+      };
+
+      const getProjectNameFromLocalPath = (repo: any): string | undefined => {
+        const repoPath = repo?.rootUri?.fsPath;
+        if (repoPath) {
+          let name = path.basename(repoPath);
+          if (name.endsWith(".git")) name = name.slice(0, -4);
+          return name || undefined;
+        }
+        return undefined;
+      };
+
+      if (remotes.length > 0) {
+        const originRemote = remotes.find(
+          (remote: any) => remote.name === "origin"
+        );
+        const remoteToUse = originRemote || remotes[0];
+        const remoteUrl = remoteToUse.fetchUrl || remoteToUse.pushUrl;
+        if (remoteUrl) {
+          const projectName = getProjectNameFromUrl(remoteUrl);
+          if (projectName) return projectName;
+        }
+      }
+
+      const localProjectName = getProjectNameFromLocalPath(repository);
+      if (localProjectName) return localProjectName;
+
+      return undefined;
+    } catch (error) {
+      log(
+        `Error getting project name from Git: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      return workspaceFolder?.name;
+    }
   }
 
   public dispose(): void {
