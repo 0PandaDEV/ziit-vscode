@@ -398,9 +398,9 @@ export class HeartbeatManager {
     this.lastHeartbeat = now;
     this.heartbeatCount++;
 
-    const project = await this.getProjectName();
+    const project = await this.getProjectName(activeEditor.document.uri);
     if (!project) {
-      log("No project name found, skipping heartbeat");
+      log("No project name found for the current file, skipping heartbeat");
       return;
     }
 
@@ -557,21 +557,34 @@ export class HeartbeatManager {
     });
   }
 
-  private async getProjectName(): Promise<string | undefined> {
+  private async getProjectName(fileUri: vscode.Uri): Promise<string | undefined> {
     try {
       const gitExtension = vscode.extensions.getExtension<{
         getAPI(version: number): any;
       }>("vscode.git");
-      if (!gitExtension) return undefined;
+      if (!gitExtension) {
+         log("Git extension not found.");
+         return this.getProjectNameFromWorkspaceFolder(fileUri);
+      }
 
       if (!gitExtension.isActive) {
         await gitExtension.activate();
+         log("Git extension activated.");
       }
 
       const git = gitExtension.exports.getAPI(1);
-      if (!git || git.repositories.length === 0) return undefined;
+      if (!git) {
+        log("Git API not available.");
+        return this.getProjectNameFromWorkspaceFolder(fileUri);
+      }
 
-      const repository = git.repositories[0];
+      const repository = git.getRepository(fileUri);
+      if (!repository) {
+         log(`No Git repository found containing the file: ${fileUri.fsPath}`);
+         return this.getProjectNameFromWorkspaceFolder(fileUri);
+      }
+
+      log(`Found repository for file ${fileUri.fsPath}: ${repository.rootUri.fsPath}`);
       const remotes = repository.state.remotes;
 
       const getProjectNameFromUrl = (url: string): string | undefined => {
@@ -622,9 +635,14 @@ export class HeartbeatManager {
           error instanceof Error ? error.message : String(error)
         }`
       );
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-      return workspaceFolder?.name;
+      return this.getProjectNameFromWorkspaceFolder(fileUri);
     }
+  }
+
+  private getProjectNameFromWorkspaceFolder(fileUri: vscode.Uri): string | undefined {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
+    log(`Falling back to workspace folder name for ${fileUri.fsPath}. Found: ${workspaceFolder?.name}`);
+    return workspaceFolder?.name;
   }
 
   public dispose(): void {
