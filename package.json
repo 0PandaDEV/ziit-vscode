@@ -93,11 +93,6 @@
           "default": true,
           "description": "Show/hide the status bar item"
         },
-        "ziit.statusBarCodingActivity": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show/hide coding activity in the status bar"
-        },
         "ziit.debug": {
           "type": "boolean",
           "default": false,

@@ -91,15 +91,7 @@ export class StatusBarManager {
       }, 1000);
     }
 
-    const showCodingActivity = config.get<boolean>(
-      "statusBarCodingActivity",
-      true
-    );
-    if (showCodingActivity) {
-      this.statusBarItem.text = `$(clock) ${hours} hrs ${minutes} mins`;
-    } else {
-      this.statusBarItem.text = `$(clock) ${hours} hrs ${minutes} mins`;
-    }
+    this.statusBarItem.text = `$(clock) ${hours} hrs ${minutes} mins`;
   }
 
   public dispose(): void {
