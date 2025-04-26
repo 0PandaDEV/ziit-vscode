@@ -2,9 +2,11 @@ import * as vscode from "vscode";
 import { log, showOutputChannel } from "./log";
 import { HeartbeatManager } from "./heartbeat";
 import { StatusBarManager } from "./status-bar";
-import { setApiKey, setBaseUrl } from "./config";
+import { setApiKey, setBaseUrl, initializeAndSyncConfig } from "./config";
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+  await initializeAndSyncConfig();
+
   log("Ziit extension activated");
 
   const statusBarManager = new StatusBarManager();
@@ -17,7 +19,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const openDashboardCommand = vscode.commands.registerCommand(
     "ziit.openDashboard",
-    () => {
+    async () => {
       const config = vscode.workspace.getConfiguration("ziit");
       const baseUrl = config.get<string>("baseUrl");
       if (baseUrl) {
@@ -30,15 +32,15 @@ export function activate(context: vscode.ExtensionContext) {
 
   const setApiKeyCommand = vscode.commands.registerCommand(
     "ziit.setApiKey",
-    () => {
-      setApiKey();
+    async () => {
+      await setApiKey();
     }
   );
 
   const setBaseUrlCommand = vscode.commands.registerCommand(
     "ziit.setBaseUrl",
-    () => {
-      setBaseUrl();
+    async () => {
+      await setBaseUrl();
     }
   );
 
