@@ -30,6 +30,7 @@ export class HeartbeatManager {
   private offlineHeartbeats: Heartbeat[] = [];
   private offlineQueuePath: string;
   private isOnline: boolean = true;
+  private hasValidApiKey: boolean = true;
   private lastActivity: number = Date.now();
   private todayLocalTotalSeconds: number = 0;
   private isWindowFocused: boolean = true;
@@ -65,6 +66,11 @@ export class HeartbeatManager {
       this.fetchDailySummary();
       fetchUserSettings(this);
     }, 30000);
+
+    if (this.statusBar) {
+      this.statusBar.setOnlineStatus(this.isOnline);
+      this.statusBar.setApiKeyStatus(this.hasValidApiKey);
+    }
   }
 
   private registerEventListeners(): void {
@@ -261,7 +267,9 @@ export class HeartbeatManager {
         }>;
         timezone: string;
       }>(requestOptions);
-      this.isOnline = true;
+
+      this.setOnlineStatus(true);
+      this.setApiKeyStatus(true);
 
       if (
         apiResponse &&
@@ -283,8 +291,13 @@ export class HeartbeatManager {
         }
       }
     } catch (error) {
-      this.isOnline = false;
-      log(`Error fetching daily summary: ${error}`);
+      if (error instanceof Error && error.message.includes("401")) {
+        this.setApiKeyStatus(false);
+        log(`Error fetching daily summary: Invalid API key`);
+      } else {
+        this.setOnlineStatus(false);
+        log(`Error fetching daily summary: ${error}`);
+      }
     }
   }
 
@@ -337,17 +350,27 @@ export class HeartbeatManager {
               res.statusCode < 300
             ) {
               resolve();
+            } else if (res.statusCode === 401) {
+              this.setApiKeyStatus(false);
+              reject(
+                new Error(`Invalid API key (status code: ${res.statusCode})`)
+              );
             } else {
               reject(new Error(`Failed with status code: ${res.statusCode}`));
             }
           }
         );
 
-        req.on("error", reject);
+        req.on("error", (err) => {
+          this.setOnlineStatus(false);
+          reject(err);
+        });
         req.write(data);
         req.end();
       });
 
+      this.setOnlineStatus(true);
+      this.setApiKeyStatus(true);
       this.saveOfflineHeartbeats();
       this.fetchDailySummary();
     } catch (error) {
@@ -358,7 +381,12 @@ export class HeartbeatManager {
       );
       this.offlineHeartbeats = [...this.offlineHeartbeats, ...batch];
       this.saveOfflineHeartbeats();
-      this.isOnline = false;
+
+      if (error instanceof Error && error.message.includes("API key")) {
+        this.setApiKeyStatus(false);
+      } else {
+        this.setOnlineStatus(false);
+      }
     }
   }
 
@@ -460,20 +488,37 @@ export class HeartbeatManager {
               res.statusCode >= 200 &&
               res.statusCode < 300
             ) {
-              this.isOnline = true;
+              this.successCount++;
+              this.setOnlineStatus(true);
+              this.setApiKeyStatus(true);
               resolve();
+            } else if (res.statusCode === 401) {
+              this.setApiKeyStatus(false);
+              reject(
+                new Error(`Invalid API key (status code: ${res.statusCode})`)
+              );
             } else {
+              this.failureCount++;
               reject(new Error(`Failed with status code: ${res.statusCode}`));
             }
           }
         );
 
-        req.on("error", reject);
+        req.on("error", (err) => {
+          this.failureCount++;
+          this.setOnlineStatus(false);
+          reject(err);
+        });
         req.write(data);
         req.end();
       });
     } catch (error) {
-      this.isOnline = false;
+      if (error instanceof Error && error.message.includes("API key")) {
+        this.setApiKeyStatus(false);
+      } else {
+        this.setOnlineStatus(false);
+      }
+
       this.offlineHeartbeats.push(heartbeat);
       this.saveOfflineHeartbeats();
       log(
@@ -542,6 +587,11 @@ export class HeartbeatManager {
                   )
                 );
               }
+            } else if (res.statusCode === 401) {
+              this.setApiKeyStatus(false);
+              reject(
+                new Error(`Invalid API key (status code: ${res.statusCode})`)
+              );
             } else {
               reject(
                 new Error(
@@ -552,24 +602,29 @@ export class HeartbeatManager {
           });
         }
       );
-      req.on("error", reject);
+      req.on("error", (error) => {
+        this.setOnlineStatus(false);
+        reject(error);
+      });
       req.end();
     });
   }
 
-  private async getProjectName(fileUri: vscode.Uri): Promise<string | undefined> {
+  private async getProjectName(
+    fileUri: vscode.Uri
+  ): Promise<string | undefined> {
     try {
       const gitExtension = vscode.extensions.getExtension<{
         getAPI(version: number): any;
       }>("vscode.git");
       if (!gitExtension) {
-         log("Git extension not found.");
-         return this.getProjectNameFromWorkspaceFolder(fileUri);
+        log("Git extension not found.");
+        return this.getProjectNameFromWorkspaceFolder(fileUri);
       }
 
       if (!gitExtension.isActive) {
         await gitExtension.activate();
-         log("Git extension activated.");
+        log("Git extension activated.");
       }
 
       const git = gitExtension.exports.getAPI(1);
@@ -580,11 +635,13 @@ export class HeartbeatManager {
 
       const repository = git.getRepository(fileUri);
       if (!repository) {
-         log(`No Git repository found containing the file: ${fileUri.fsPath}`);
-         return this.getProjectNameFromWorkspaceFolder(fileUri);
+        log(`No Git repository found containing the file: ${fileUri.fsPath}`);
+        return this.getProjectNameFromWorkspaceFolder(fileUri);
       }
 
-      log(`Found repository for file ${fileUri.fsPath}: ${repository.rootUri.fsPath}`);
+      log(
+        `Found repository for file ${fileUri.fsPath}: ${repository.rootUri.fsPath}`
+      );
       const remotes = repository.state.remotes;
 
       const getProjectNameFromUrl = (url: string): string | undefined => {
@@ -639,10 +696,34 @@ export class HeartbeatManager {
     }
   }
 
-  private getProjectNameFromWorkspaceFolder(fileUri: vscode.Uri): string | undefined {
+  private getProjectNameFromWorkspaceFolder(
+    fileUri: vscode.Uri
+  ): string | undefined {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
-    log(`Falling back to workspace folder name for ${fileUri.fsPath}. Found: ${workspaceFolder?.name}`);
+    log(
+      `Falling back to workspace folder name for ${fileUri.fsPath}. Found: ${workspaceFolder?.name}`
+    );
     return workspaceFolder?.name;
+  }
+
+  private setOnlineStatus(isOnline: boolean): void {
+    if (this.isOnline !== isOnline) {
+      this.isOnline = isOnline;
+      if (this.statusBar) {
+        this.statusBar.setOnlineStatus(isOnline);
+      }
+      log(`Online status changed to: ${isOnline ? "online" : "offline"}`);
+    }
+  }
+
+  private setApiKeyStatus(isValid: boolean): void {
+    if (this.hasValidApiKey !== isValid) {
+      this.hasValidApiKey = isValid;
+      if (this.statusBar) {
+        this.statusBar.setApiKeyStatus(isValid);
+      }
+      log(`API key status changed to: ${isValid ? "valid" : "invalid"}`);
+    }
   }
 
   public dispose(): void {

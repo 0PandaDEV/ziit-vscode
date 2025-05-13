@@ -252,7 +252,17 @@ export async function fetchUserSettings(heartbeatManager?: any): Promise<void> {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        log("Invalid API key detected when fetching user settings");
+        if (heartbeatManager?.setApiKeyStatus) {
+          heartbeatManager.setApiKeyStatus(false);
+        }
+      }
       throw new Error(`Error fetching user settings: ${response.statusText}`);
+    }
+
+    if (heartbeatManager?.setApiKeyStatus) {
+      heartbeatManager.setApiKeyStatus(true);
     }
 
     const data = await response.json();
@@ -268,6 +278,9 @@ export async function fetchUserSettings(heartbeatManager?: any): Promise<void> {
       }
     }
   } catch (error) {
+    if (heartbeatManager?.setOnlineStatus) {
+      heartbeatManager.setOnlineStatus(false);
+    }
     log(
       `Failed to fetch user settings: ${
         error instanceof Error ? error.message : String(error)

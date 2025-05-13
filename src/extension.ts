@@ -2,7 +2,12 @@ import * as vscode from "vscode";
 import { log, showOutputChannel } from "./log";
 import { HeartbeatManager } from "./heartbeat";
 import { StatusBarManager } from "./status-bar";
-import { setApiKey, setBaseUrl, initializeAndSyncConfig } from "./config";
+import {
+  setApiKey,
+  setBaseUrl,
+  initializeAndSyncConfig,
+  fetchUserSettings,
+} from "./config";
 
 export async function activate(context: vscode.ExtensionContext) {
   await initializeAndSyncConfig();
@@ -16,6 +21,15 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(heartbeatManager);
 
   heartbeatManager.fetchDailySummary();
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("ziit.apiKey")) {
+        log("API key changed in settings, validating...");
+        fetchUserSettings(heartbeatManager);
+      }
+    })
+  );
 
   const openDashboardCommand = vscode.commands.registerCommand(
     "ziit.openDashboard",
@@ -34,6 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
     "ziit.setApiKey",
     async () => {
       await setApiKey();
+      fetchUserSettings(heartbeatManager);
     }
   );
 
