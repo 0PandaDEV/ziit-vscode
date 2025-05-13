@@ -3,7 +3,7 @@
   "displayName": "Ziit",
   "description": "The swiss army knive for coding time tracking.",
   "publisher": "PandaDEV",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "keywords": [
     "ziit",
     "vscode",
@@ -110,9 +110,9 @@
     "dev": "esbuild ./src/extension.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node --watch"
   },
   "devDependencies": {
-    "@types/node": "22.14.0",
+    "@types/node": "22.15.17",
     "@types/vscode": "1.93.0",
-    "esbuild": "0.25.2"
+    "esbuild": "0.25.4"
   },
   "repository": {
     "type": "git",
