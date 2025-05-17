@@ -82,25 +82,6 @@
           "type": "string",
           "default": "https://ziit.app",
           "description": "Base URL for the Ziit server instance"
-        },
-        "ziit.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable time tracking"
-        },
-        "ziit.statusBarEnabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show/hide the status bar item"
-        },
-        "ziit.debug": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable debug logging"
-        },
-        "ziit.keystrokeTimeout": {
-          "type": "number",
-          "description": "Inactivity timeout in minutes before stopping time tracking"
         }
       }
     }

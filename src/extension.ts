@@ -6,7 +6,6 @@ import {
   setApiKey,
   setBaseUrl,
   initializeAndSyncConfig,
-  fetchUserSettings,
 } from "./config";
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -26,7 +25,6 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("ziit.apiKey")) {
         log("API key changed in settings, validating...");
-        fetchUserSettings(heartbeatManager);
       }
     })
   );
@@ -48,7 +46,6 @@ export async function activate(context: vscode.ExtensionContext) {
     "ziit.setApiKey",
     async () => {
       await setApiKey();
-      fetchUserSettings(heartbeatManager);
     }
   );
 

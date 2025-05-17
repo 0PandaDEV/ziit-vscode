@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StatusBarManager } from "./status-bar";
-import { fetchUserSettings } from "./config";
+import { getApiKey, getBaseUrl } from "./config";
 
 interface Heartbeat {
   timestamp: string;
@@ -34,7 +34,6 @@ export class HeartbeatManager {
   private lastActivity: number = Date.now();
   private todayLocalTotalSeconds: number = 0;
   private isWindowFocused: boolean = true;
-  private keystrokeTimeout: number | undefined;
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -59,12 +58,9 @@ export class HeartbeatManager {
 
     this.isWindowFocused = vscode.window.state.focused;
 
-    fetchUserSettings(this);
-
     setInterval(() => {
       this.syncOfflineHeartbeats();
       this.fetchDailySummary();
-      fetchUserSettings(this);
     }, 30000);
 
     if (this.statusBar) {
@@ -202,32 +198,13 @@ export class HeartbeatManager {
   }
 
   private isUserActive(): boolean {
-    const now = Date.now();
-    if (this.keystrokeTimeout === undefined) {
-      return this.isWindowFocused;
-    }
-    return (
-      this.isWindowFocused && now - this.lastActivity < this.keystrokeTimeout
-    );
-  }
-
-  public updateKeystrokeTimeout(timeoutMinutes: number | undefined): void {
-    if (timeoutMinutes !== undefined) {
-      this.keystrokeTimeout = timeoutMinutes * 60 * 1000;
-      log(`Keystroke timeout updated to ${timeoutMinutes} minutes`);
-    } else {
-      this.keystrokeTimeout = undefined;
-      log("Keystroke timeout cleared");
-    }
+    return this.isWindowFocused;
   }
 
   public async fetchDailySummary(): Promise<void> {
-    const config = vscode.workspace.getConfiguration("ziit");
-    const apiKey = config.get<string>("apiKey");
-    const baseUrl = config.get<string>("baseUrl");
-    const enabled = config.get<boolean>("enabled");
-
-    if (!enabled || !apiKey || !baseUrl) {
+    const apiKey = await getApiKey();
+    const baseUrl = await getBaseUrl();
+    if (!apiKey || !baseUrl) {
       return;
     }
 
@@ -303,6 +280,11 @@ export class HeartbeatManager {
 
   private async syncOfflineHeartbeats(): Promise<void> {
     if (!this.isOnline || this.offlineHeartbeats.length === 0) return;
+    const apiKey = await getApiKey();
+    const baseUrl = await getBaseUrl();
+    if (!apiKey || !baseUrl) {
+      return;
+    }
 
     this.offlineHeartbeats = this.offlineHeartbeats.map((heartbeat) => ({
       ...heartbeat,
@@ -311,14 +293,6 @@ export class HeartbeatManager {
           ? new Date(heartbeat.timestamp).toISOString()
           : heartbeat.timestamp,
     }));
-
-    const config = vscode.workspace.getConfiguration("ziit");
-    const apiKey = config.get<string>("apiKey");
-    const baseUrl = config.get<string>("baseUrl");
-
-    if (!apiKey || !baseUrl) {
-      return;
-    }
 
     const batch = [...this.offlineHeartbeats];
     this.offlineHeartbeats = [];
@@ -412,32 +386,24 @@ export class HeartbeatManager {
   private async sendHeartbeat(force: boolean = false): Promise<void> {
     const activeEditor = vscode.window.activeTextEditor;
     if (!activeEditor || !this.activeDocumentInfo) return;
-
     const now = Date.now();
     const fileChanged = this.lastFile !== activeEditor.document.uri.fsPath;
     const timeThresholdPassed =
       now - this.lastHeartbeat >= this.heartbeatInterval;
-
     if (!force && !fileChanged && !timeThresholdPassed) {
       return;
     }
-
     this.lastFile = activeEditor.document.uri.fsPath;
     this.lastHeartbeat = now;
     this.heartbeatCount++;
-
     const project = await this.getProjectName(activeEditor.document.uri);
     if (!project) {
       log("No project name found for the current file, skipping heartbeat");
       return;
     }
-
-    const config = vscode.workspace.getConfiguration("ziit");
-    const apiKey = config.get<string>("apiKey");
-    const baseUrl = config.get<string>("baseUrl");
-    const enabled = config.get<boolean>("enabled");
-
-    if (!enabled || !apiKey || !baseUrl) {
+    const apiKey = await getApiKey();
+    const baseUrl = await getBaseUrl();
+    if (!apiKey || !baseUrl) {
       return;
     }
 
