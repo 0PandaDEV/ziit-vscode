@@ -294,73 +294,79 @@ export class HeartbeatManager {
           : heartbeat.timestamp,
     }));
 
-    const batch = [...this.offlineHeartbeats];
-    this.offlineHeartbeats = [];
+    while (this.offlineHeartbeats.length > 0) {
+      const batch = this.offlineHeartbeats.slice(0, 1000);
+      this.offlineHeartbeats = this.offlineHeartbeats.slice(1000);
 
-    try {
-      const data = JSON.stringify(batch);
-      const url = new URL("/api/external/batch", baseUrl);
+      try {
+        const data = JSON.stringify(batch);
+        const url = new URL("/api/external/batch", baseUrl);
 
-      const requestOptions = {
-        hostname: url.hostname,
-        port: url.port || (url.protocol === "https:" ? 443 : 80),
-        path: url.pathname + url.search,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(data),
-          Authorization: `Bearer ${apiKey}`,
-        },
-        protocol: url.protocol,
-      };
+        const requestOptions = {
+          hostname: url.hostname,
+          port: url.port || (url.protocol === "https:" ? 443 : 80),
+          path: url.pathname + url.search,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(data),
+            Authorization: `Bearer ${apiKey}`,
+          },
+          protocol: url.protocol,
+        };
 
-      await new Promise<void>((resolve, reject) => {
-        const req = (url.protocol === "https:" ? https : http).request(
-          requestOptions,
-          (res) => {
-            if (
-              res.statusCode &&
-              res.statusCode >= 200 &&
-              res.statusCode < 300
-            ) {
-              resolve();
-            } else if (res.statusCode === 401) {
-              this.setApiKeyStatus(false);
-              reject(
-                new Error(`Invalid API key (status code: ${res.statusCode})`)
-              );
-            } else {
-              reject(new Error(`Failed with status code: ${res.statusCode}`));
+        await new Promise<void>((resolve, reject) => {
+          const req = (url.protocol === "https:" ? https : http).request(
+            requestOptions,
+            (res) => {
+              if (
+                res.statusCode &&
+                res.statusCode >= 200 &&
+                res.statusCode < 300
+              ) {
+                resolve();
+              } else if (res.statusCode === 401) {
+                this.setApiKeyStatus(false);
+                reject(
+                  new Error(`Invalid API key (status code: ${res.statusCode})`)
+                );
+              } else {
+                reject(new Error(`Failed with status code: ${res.statusCode}`));
+              }
             }
-          }
-        );
+          );
 
-        req.on("error", (err) => {
-          this.setOnlineStatus(false);
-          reject(err);
+          req.on("error", (err) => {
+            this.setOnlineStatus(false);
+            reject(err);
+          });
+          req.write(data);
+          req.end();
         });
-        req.write(data);
-        req.end();
-      });
 
-      this.setOnlineStatus(true);
-      this.setApiKeyStatus(true);
-      this.saveOfflineHeartbeats();
-      this.fetchDailySummary();
-    } catch (error) {
-      log(
-        `Error syncing offline heartbeats: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-      this.offlineHeartbeats = [...this.offlineHeartbeats, ...batch];
-      this.saveOfflineHeartbeats();
+        this.setOnlineStatus(true);
+        this.setApiKeyStatus(true);
+        this.saveOfflineHeartbeats();
+      } catch (error) {
+        log(
+          `Error syncing offline heartbeats batch: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+        this.offlineHeartbeats = [...batch, ...this.offlineHeartbeats];
+        this.saveOfflineHeartbeats();
 
-      if (error instanceof Error && error.message.includes("API key")) {
-        this.setApiKeyStatus(false);
-      } else {
-        this.setOnlineStatus(false);
+        if (error instanceof Error && error.message.includes("API key")) {
+          this.setApiKeyStatus(false);
+        } else {
+          this.setOnlineStatus(false);
+        }
+        break;
       }
+    }
+
+    if (this.offlineHeartbeats.length === 0) {
+      this.fetchDailySummary();
     }
   }
 
