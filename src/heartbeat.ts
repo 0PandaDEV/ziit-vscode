@@ -34,6 +34,7 @@ export class HeartbeatManager {
   private lastActivity: number = Date.now();
   private todayLocalTotalSeconds: number = 0;
   private isWindowFocused: boolean = true;
+  private unsyncedLocalSeconds: number = 0;
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -170,7 +171,14 @@ export class HeartbeatManager {
   };
 
   private updateActivity(): void {
-    this.lastActivity = Date.now();
+    const now = Date.now();
+    if (this.isUserActive() && this.lastActivity > 0) {
+      const elapsedSeconds = Math.floor((now - this.lastActivity) / 1000);
+      if (elapsedSeconds > 0) {
+        this.unsyncedLocalSeconds += elapsedSeconds;
+      }
+    }
+    this.lastActivity = now;
   }
 
   private scheduleHeartbeat(): void {
@@ -180,6 +188,7 @@ export class HeartbeatManager {
 
     setInterval(() => {
       if (this.activeDocumentInfo && this.isUserActive()) {
+        this.updateActivity();
         this.sendHeartbeat();
       } else {
         log("User inactive or no active document, skipping heartbeat");
@@ -202,6 +211,8 @@ export class HeartbeatManager {
   }
 
   public async fetchDailySummary(): Promise<void> {
+    this.updateActivity();
+
     const apiKey = await getApiKey();
     const baseUrl = await getBaseUrl();
     if (!apiKey || !baseUrl) {
@@ -256,15 +267,20 @@ export class HeartbeatManager {
         const todaySummary = apiResponse.summaries[0];
         this.todayLocalTotalSeconds = todaySummary.totalSeconds;
 
+        const totalSeconds =
+          this.todayLocalTotalSeconds + this.unsyncedLocalSeconds;
+
         if (this.statusBar) {
-          const hours = Math.floor(this.todayLocalTotalSeconds / 3600);
-          const minutes = Math.floor((this.todayLocalTotalSeconds % 3600) / 60);
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
           this.statusBar.updateTime(hours, minutes);
         }
       } else {
-        this.todayLocalTotalSeconds = 0;
+        const totalSeconds = this.unsyncedLocalSeconds;
         if (this.statusBar) {
-          this.statusBar.updateTime(0, 0);
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          this.statusBar.updateTime(hours, minutes);
         }
       }
     } catch (error) {
@@ -274,6 +290,14 @@ export class HeartbeatManager {
       } else {
         this.setOnlineStatus(false);
         log(`Error fetching daily summary: ${error}`);
+      }
+
+      if (this.statusBar && this.unsyncedLocalSeconds > 0) {
+        const totalSeconds =
+          this.todayLocalTotalSeconds + this.unsyncedLocalSeconds;
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        this.statusBar.updateTime(hours, minutes);
       }
     }
   }
@@ -347,6 +371,8 @@ export class HeartbeatManager {
         this.setOnlineStatus(true);
         this.setApiKeyStatus(true);
         this.saveOfflineHeartbeats();
+
+        this.unsyncedLocalSeconds = 0;
       } catch (error) {
         log(
           `Error syncing offline heartbeats batch: ${
@@ -463,6 +489,9 @@ export class HeartbeatManager {
               this.successCount++;
               this.setOnlineStatus(true);
               this.setApiKeyStatus(true);
+
+              this.unsyncedLocalSeconds = 0;
+
               resolve();
             } else if (res.statusCode === 401) {
               this.setApiKeyStatus(false);
