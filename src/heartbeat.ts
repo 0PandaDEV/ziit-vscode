@@ -22,6 +22,7 @@ export class HeartbeatManager {
   private lastHeartbeat: number = 0;
   private lastFile: string = "";
   private heartbeatInterval: number = 120000;
+  private userInactivityThresholdMilliseconds: number = 15 * 60 * 1000;
   private activeDocumentInfo: { file: string; language: string } | null = null;
   private statusBar: StatusBarManager | null = null;
   private heartbeatCount: number = 0;
@@ -35,6 +36,8 @@ export class HeartbeatManager {
   private todayLocalTotalSeconds: number = 0;
   private isWindowFocused: boolean = true;
   private unsyncedLocalSeconds: number = 0;
+  private activityAccumulatorIntervalId: NodeJS.Timeout | null = null;
+  private lastTimeAccumulated: number = Date.now();
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -53,20 +56,46 @@ export class HeartbeatManager {
   }
 
   private initialize(): void {
+    this.isWindowFocused = vscode.window.state.focused;
+    this.lastActivity = Date.now();
+    this.lastTimeAccumulated = Date.now();
+
+    this.activityAccumulatorIntervalId = setInterval(() => {
+      const now = Date.now();
+      if (this.isWindowFocused) {
+        const timeSinceLastInteraction = now - this.lastActivity;
+        if (
+          timeSinceLastInteraction < this.userInactivityThresholdMilliseconds
+        ) {
+          const elapsedSeconds = Math.floor(
+            (now - this.lastTimeAccumulated) / 1000
+          );
+          if (elapsedSeconds > 0) {
+            this.unsyncedLocalSeconds += elapsedSeconds;
+          }
+        }
+      }
+      this.lastTimeAccumulated = now;
+    }, 5000);
+
+    this.context.subscriptions.push({
+      dispose: () => {
+        if (this.activityAccumulatorIntervalId) {
+          clearInterval(this.activityAccumulatorIntervalId);
+        }
+      },
+    });
+
     this.registerEventListeners();
     this.scheduleHeartbeat();
     this.syncOfflineHeartbeats();
 
-    this.isWindowFocused = vscode.window.state.focused;
-
-    setInterval(() => {
-      this.syncOfflineHeartbeats();
-      this.fetchDailySummary();
-    }, 30000);
-
     if (this.statusBar) {
       this.statusBar.setOnlineStatus(this.isOnline);
       this.statusBar.setApiKeyStatus(this.hasValidApiKey);
+      if (this.isWindowFocused) {
+        this.statusBar.startTracking();
+      }
     }
   }
 
@@ -102,6 +131,13 @@ export class HeartbeatManager {
     }
   }
 
+  private recordUserInteraction(): void {
+    this.lastActivity = Date.now();
+    if (this.statusBar && this.isWindowFocused) {
+      this.statusBar.startTracking();
+    }
+  }
+
   private handleActiveEditorChange = (
     editor: vscode.TextEditor | undefined
   ): void => {
@@ -114,8 +150,7 @@ export class HeartbeatManager {
         file: path.basename(editor.document.uri.fsPath),
         language: editor.document.languageId,
       };
-
-      this.updateActivity();
+      this.recordUserInteraction();
       this.sendHeartbeat(true);
     }
   };
@@ -129,9 +164,7 @@ export class HeartbeatManager {
         file: path.basename(event.document.uri.fsPath),
         language: event.document.languageId,
       };
-
-      this.updateActivity();
-
+      this.recordUserInteraction();
       const now = Date.now();
       const fileChanged = this.lastFile !== event.document.uri.fsPath;
       const timeThresholdPassed =
@@ -146,7 +179,7 @@ export class HeartbeatManager {
   private handleDocumentSave = (document: vscode.TextDocument): void => {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document === document) {
-      this.updateActivity();
+      this.recordUserInteraction();
       this.sendHeartbeat(true);
     }
   };
@@ -158,41 +191,52 @@ export class HeartbeatManager {
     log(`Window focus state changed: ${wasFocused} -> ${this.isWindowFocused}`);
 
     if (!this.isWindowFocused && wasFocused) {
-      this.updateActivity();
       if (this.statusBar) {
         this.statusBar.stopTracking();
       }
     } else if (this.isWindowFocused && !wasFocused) {
       this.lastActivity = Date.now();
+      log(
+        `Window focused, activity timer reset at ${new Date(
+          this.lastActivity
+        ).toLocaleTimeString()}`
+      );
       if (this.statusBar) {
         this.statusBar.startTracking();
       }
     }
   };
 
-  private updateActivity(): void {
-    const now = Date.now();
-    if (this.isUserActive() && this.lastActivity > 0) {
-      const elapsedSeconds = Math.floor((now - this.lastActivity) / 1000);
-      if (elapsedSeconds > 0) {
-        this.unsyncedLocalSeconds += elapsedSeconds;
-      }
-    }
-    this.lastActivity = now;
-  }
-
   private scheduleHeartbeat(): void {
     log(
-      `Setting up heartbeat schedule with interval: ${this.heartbeatInterval}ms`
+      `Setting up heartbeat schedule with interval: ${this.heartbeatInterval}ms and inactivity threshold: ${this.userInactivityThresholdMilliseconds}ms`
     );
 
     setInterval(() => {
-      if (this.activeDocumentInfo && this.isUserActive()) {
-        this.updateActivity();
+      const now = Date.now();
+      const userIsEffectivelyActive =
+        this.isWindowFocused &&
+        now - this.lastActivity < this.userInactivityThresholdMilliseconds;
+
+      if (this.activeDocumentInfo && userIsEffectivelyActive) {
         this.sendHeartbeat();
+        if (this.statusBar && this.isWindowFocused) {
+          this.statusBar.startTracking();
+        }
       } else {
-        log("User inactive or no active document, skipping heartbeat");
-        if (this.statusBar && !this.isUserActive()) {
+        const reason = !this.activeDocumentInfo
+          ? "no active document"
+          : !this.isWindowFocused
+          ? "window not focused"
+          : "user inactive";
+        log(
+          `Skipping heartbeat (${reason}). Focused: ${
+            this.isWindowFocused
+          }, SufficientlyRecentInteraction: ${
+            now - this.lastActivity < this.userInactivityThresholdMilliseconds
+          }, ActiveDoc: ${!!this.activeDocumentInfo}`
+        );
+        if (this.statusBar) {
           this.statusBar.stopTracking();
         }
       }
@@ -211,8 +255,6 @@ export class HeartbeatManager {
   }
 
   public async fetchDailySummary(): Promise<void> {
-    this.updateActivity();
-
     const apiKey = await getApiKey();
     const baseUrl = await getBaseUrl();
     if (!apiKey || !baseUrl) {
@@ -275,6 +317,7 @@ export class HeartbeatManager {
           const minutes = Math.floor((totalSeconds % 3600) / 60);
           this.statusBar.updateTime(hours, minutes);
         }
+        this.unsyncedLocalSeconds = 0;
       } else {
         const totalSeconds = this.unsyncedLocalSeconds;
         if (this.statusBar) {
@@ -292,7 +335,10 @@ export class HeartbeatManager {
         log(`Error fetching daily summary: ${error}`);
       }
 
-      if (this.statusBar && this.unsyncedLocalSeconds > 0) {
+      if (
+        this.statusBar &&
+        (this.todayLocalTotalSeconds > 0 || this.unsyncedLocalSeconds > 0)
+      ) {
         const totalSeconds =
           this.todayLocalTotalSeconds + this.unsyncedLocalSeconds;
         const hours = Math.floor(totalSeconds / 3600);
@@ -729,5 +775,9 @@ export class HeartbeatManager {
 
   public dispose(): void {
     this.saveOfflineHeartbeats();
+    if (this.activityAccumulatorIntervalId) {
+      clearInterval(this.activityAccumulatorIntervalId);
+      this.activityAccumulatorIntervalId = null;
+    }
   }
 }
