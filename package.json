@@ -91,9 +91,9 @@
     "dev": "esbuild ./src/extension.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node --watch"
   },
   "devDependencies": {
-    "@types/node": "22.15.17",
+    "@types/node": "24.0.3",
     "@types/vscode": "1.93.0",
-    "esbuild": "0.25.4"
+    "esbuild": "0.25.5"
   },
   "repository": {
     "type": "git",
