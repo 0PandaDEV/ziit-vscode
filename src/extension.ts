@@ -2,11 +2,7 @@ import * as vscode from "vscode";
 import { log, showOutputChannel } from "./log";
 import { HeartbeatManager } from "./heartbeat";
 import { StatusBarManager } from "./status-bar";
-import {
-  setApiKey,
-  setBaseUrl,
-  initializeAndSyncConfig,
-} from "./config";
+import { setApiKey, setBaseUrl, initializeAndSyncConfig } from "./config";
 
 export async function activate(context: vscode.ExtensionContext) {
   await initializeAndSyncConfig();

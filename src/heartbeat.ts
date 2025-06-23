@@ -145,13 +145,12 @@ export class HeartbeatManager {
       log(
         `Editor changed: ${editor.document.uri.fsPath} (${editor.document.languageId})`
       );
-
       this.activeDocumentInfo = {
         file: path.basename(editor.document.uri.fsPath),
         language: editor.document.languageId,
       };
       this.recordUserInteraction();
-      this.sendHeartbeat(true);
+      this.sendHeartbeat(true).then(() => this.fetchDailySummary());
     }
   };
 
@@ -169,9 +168,8 @@ export class HeartbeatManager {
       const fileChanged = this.lastFile !== event.document.uri.fsPath;
       const timeThresholdPassed =
         now - this.lastHeartbeat >= this.heartbeatInterval;
-
       if (fileChanged || timeThresholdPassed) {
-        this.sendHeartbeat();
+        this.sendHeartbeat().then(() => this.fetchDailySummary());
       }
     }
   };
@@ -180,20 +178,19 @@ export class HeartbeatManager {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document === document) {
       this.recordUserInteraction();
-      this.sendHeartbeat(true);
+      this.sendHeartbeat(true).then(() => this.fetchDailySummary());
     }
   };
 
   private handleWindowStateChange = (windowState: vscode.WindowState): void => {
     const wasFocused = this.isWindowFocused;
     this.isWindowFocused = windowState.focused;
-
     log(`Window focus state changed: ${wasFocused} -> ${this.isWindowFocused}`);
-
     if (!this.isWindowFocused && wasFocused) {
       if (this.statusBar) {
         this.statusBar.stopTracking();
       }
+      this.fetchDailySummary();
     } else if (this.isWindowFocused && !wasFocused) {
       this.lastActivity = Date.now();
       log(
@@ -204,6 +201,7 @@ export class HeartbeatManager {
       if (this.statusBar) {
         this.statusBar.startTracking();
       }
+      this.fetchDailySummary();
     }
   };
 
@@ -211,15 +209,13 @@ export class HeartbeatManager {
     log(
       `Setting up heartbeat schedule with interval: ${this.heartbeatInterval}ms and inactivity threshold: ${this.userInactivityThresholdMilliseconds}ms`
     );
-
     setInterval(() => {
       const now = Date.now();
       const userIsEffectivelyActive =
         this.isWindowFocused &&
         now - this.lastActivity < this.userInactivityThresholdMilliseconds;
-
       if (this.activeDocumentInfo && userIsEffectivelyActive) {
-        this.sendHeartbeat();
+        this.sendHeartbeat().then(() => this.fetchDailySummary());
         if (this.statusBar && this.isWindowFocused) {
           this.statusBar.startTracking();
         }
@@ -241,17 +237,12 @@ export class HeartbeatManager {
         }
       }
     }, this.heartbeatInterval);
-
     setInterval(() => {
       this.fetchDailySummary();
       log(
         `Heartbeat stats - Total: ${this.heartbeatCount}, Success: ${this.successCount}, Failed: ${this.failureCount}, Offline: ${this.offlineHeartbeats.length}`
       );
     }, 15 * 60 * 1000);
-  }
-
-  private isUserActive(): boolean {
-    return this.isWindowFocused;
   }
 
   public async fetchDailySummary(): Promise<void> {
@@ -484,7 +475,6 @@ export class HeartbeatManager {
     if (!apiKey || !baseUrl) {
       return;
     }
-
     const branch = await this.getGitBranch();
     const heartbeat: Heartbeat = {
       timestamp: new Date().toISOString(),
@@ -500,17 +490,14 @@ export class HeartbeatManager {
           ? "macOS"
           : "Linux",
     };
-
     if (!this.isOnline) {
       this.offlineHeartbeats.push(heartbeat);
       this.saveOfflineHeartbeats();
       return;
     }
-
     try {
       const data = JSON.stringify(heartbeat);
       const url = new URL(`${baseUrl}/api/external/heartbeats`);
-
       const requestOptions = {
         hostname: url.hostname,
         port: url.port || (url.protocol === "https:" ? 443 : 80),
@@ -522,7 +509,6 @@ export class HeartbeatManager {
           Authorization: `Bearer ${apiKey}`,
         },
       };
-
       await new Promise<void>((resolve, reject) => {
         const req = (url.protocol === "https:" ? https : http).request(
           requestOptions,
@@ -535,9 +521,10 @@ export class HeartbeatManager {
               this.successCount++;
               this.setOnlineStatus(true);
               this.setApiKeyStatus(true);
-
               this.unsyncedLocalSeconds = 0;
-
+              log(
+                `Heartbeat sent successfully for ${heartbeat.file} (${heartbeat.language}) in project ${heartbeat.project}`
+              );
               resolve();
             } else if (res.statusCode === 401) {
               this.setApiKeyStatus(false);
@@ -550,7 +537,6 @@ export class HeartbeatManager {
             }
           }
         );
-
         req.on("error", (err) => {
           this.failureCount++;
           this.setOnlineStatus(false);
@@ -565,7 +551,6 @@ export class HeartbeatManager {
       } else {
         this.setOnlineStatus(false);
       }
-
       this.offlineHeartbeats.push(heartbeat);
       this.saveOfflineHeartbeats();
       log(
