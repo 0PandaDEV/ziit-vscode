@@ -251,11 +251,9 @@ export class HeartbeatManager {
     if (!apiKey || !baseUrl) {
       return;
     }
-
     try {
       const url = new URL("/api/external/stats", baseUrl);
       url.searchParams.append("timeRange", "today");
-
       const now = new Date();
       const timezoneOffsetMinutes = now.getTimezoneOffset();
       const timezoneOffsetSeconds = timezoneOffsetMinutes * 60;
@@ -264,7 +262,6 @@ export class HeartbeatManager {
         timezoneOffsetSeconds.toString()
       );
       url.searchParams.append("t", Date.now().toString());
-
       const requestOptions = {
         hostname: url.hostname,
         port: url.port || (url.protocol === "https:" ? 443 : 80),
@@ -275,7 +272,6 @@ export class HeartbeatManager {
         },
         protocol: url.protocol,
       };
-
       const apiResponse = await this.makeRequest<{
         summaries: Array<{
           date: string;
@@ -288,10 +284,8 @@ export class HeartbeatManager {
         }>;
         timezone: string;
       }>(requestOptions);
-
       this.setOnlineStatus(true);
       this.setApiKeyStatus(true);
-
       if (
         apiResponse &&
         apiResponse.summaries &&
@@ -299,22 +293,15 @@ export class HeartbeatManager {
       ) {
         const todaySummary = apiResponse.summaries[0];
         this.todayLocalTotalSeconds = todaySummary.totalSeconds;
-
-        const totalSeconds =
-          this.todayLocalTotalSeconds + this.unsyncedLocalSeconds;
-
         if (this.statusBar) {
-          const hours = Math.floor(totalSeconds / 3600);
-          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          const hours = Math.floor(this.todayLocalTotalSeconds / 3600);
+          const minutes = Math.floor((this.todayLocalTotalSeconds % 3600) / 60);
           this.statusBar.updateTime(hours, minutes);
         }
         this.unsyncedLocalSeconds = 0;
       } else {
-        const totalSeconds = this.unsyncedLocalSeconds;
         if (this.statusBar) {
-          const hours = Math.floor(totalSeconds / 3600);
-          const minutes = Math.floor((totalSeconds % 3600) / 60);
-          this.statusBar.updateTime(hours, minutes);
+          this.statusBar.updateTime(0, 0);
         }
       }
     } catch (error) {
@@ -325,7 +312,6 @@ export class HeartbeatManager {
         this.setOnlineStatus(false);
         log(`Error fetching daily summary: ${error}`);
       }
-
       if (
         this.statusBar &&
         (this.todayLocalTotalSeconds > 0 || this.unsyncedLocalSeconds > 0)
