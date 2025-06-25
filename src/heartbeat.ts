@@ -732,6 +732,10 @@ export class HeartbeatManager {
       }
       log(`Online status changed to: ${isOnline ? "online" : "offline"}`);
     }
+
+    if(this.isOnline == true) {
+      this.syncOfflineHeartbeats();
+    }
   }
 
   private setApiKeyStatus(isValid: boolean): void {
