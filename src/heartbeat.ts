@@ -326,6 +326,11 @@ export class HeartbeatManager {
   }
 
   private async syncOfflineHeartbeats(): Promise<void> {
+    log(
+      "Syncing offline heartbeats to the contected ziit instance: " +
+        (await getBaseUrl())
+    );
+
     if (!this.isOnline || this.offlineHeartbeats.length === 0) return;
     const apiKey = await getApiKey();
     const baseUrl = await getBaseUrl();
@@ -731,9 +736,6 @@ export class HeartbeatManager {
         this.statusBar.setOnlineStatus(isOnline);
       }
       log(`Online status changed to: ${isOnline ? "online" : "offline"}`);
-    }
-
-    if(this.isOnline == true) {
       this.syncOfflineHeartbeats();
     }
   }
