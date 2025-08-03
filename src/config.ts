@@ -69,23 +69,39 @@ async function writeConfigFile(config: ZiitConfig): Promise<void> {
   }
 }
 
-async function getConfigValue<T>(key: keyof ZiitConfig): Promise<T | undefined> {
-  let fileConfig: ZiitConfig = {};
+async function getConfigValue<T>(
+  key: keyof ZiitConfig
+): Promise<T | undefined> {
+  const vscodeConfig = vscode.workspace.getConfiguration("ziit");
+
+  const workspaceValue = vscodeConfig.inspect<T>(key)?.workspaceValue;
+  if (workspaceValue !== undefined) {
+    return workspaceValue;
+  }
+
+  const userValue = vscodeConfig.inspect<T>(key)?.globalValue;
+  if (userValue !== undefined) {
+    return userValue;
+  }
+
   try {
-    fileConfig = await readConfigFile();
+    const fileConfig: ZiitConfig = await readConfigFile();
+    if (fileConfig[key] !== undefined) {
+      return fileConfig[key] as T;
+    }
   } catch (error: any) {
     if (error.code !== "ENOENT") {
       log(`Error reading config file in getConfigValue: ${error.message}`);
     }
   }
-  if (fileConfig[key] !== undefined) {
-    return fileConfig[key] as T | undefined;
-  }
-  const vscodeConfig = vscode.workspace.getConfiguration("ziit");
-  return vscodeConfig.get<T>(key);
+
+  return undefined;
 }
 
-async function updateConfigValue<T>(key: keyof ZiitConfig, value: T): Promise<void> {
+async function updateConfigValue<T>(
+  key: keyof ZiitConfig,
+  value: T
+): Promise<void> {
   let currentConfig: ZiitConfig = {};
   try {
     currentConfig = await readConfigFile();
@@ -138,7 +154,9 @@ export async function getBaseUrl(): Promise<string> {
 }
 
 export async function initializeAndSyncConfig(): Promise<void> {
-  log("Initializing or syncing config file (.ziit.json) with VS Code settings...");
+  log(
+    "Initializing or syncing config file (.ziit.json) with VS Code settings..."
+  );
   let fileConfig: ZiitConfig;
   let fileNeedsCreation = false;
   try {
