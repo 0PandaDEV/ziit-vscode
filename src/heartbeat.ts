@@ -41,16 +41,21 @@ export class HeartbeatManager {
 
   constructor(
     private context: vscode.ExtensionContext,
-    statusBar?: StatusBarManager
+    statusBar?: StatusBarManager,
   ) {
     this.statusBar = statusBar || null;
 
-    const homeDir = os.homedir();
-    const ziitDir = path.join(homeDir, ".ziit");
-    if (!fs.existsSync(ziitDir)) {
-      fs.mkdirSync(ziitDir, { recursive: true });
+    const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+    const configDir = xdgConfigHome
+      ? path.join(xdgConfigHome, "ziit")
+      : path.join(os.homedir(), ".config", "ziit");
+
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
     }
-    this.offlineQueuePath = path.join(ziitDir, "offline_heartbeats.json");
+
+    this.offlineQueuePath = path.join(configDir, "offline_heartbeats.json");
+    this.migrateOfflineHeartbeats();
     this.loadOfflineHeartbeats();
     this.initialize();
   }
@@ -68,7 +73,7 @@ export class HeartbeatManager {
           timeSinceLastInteraction < this.userInactivityThresholdMilliseconds
         ) {
           const elapsedSeconds = Math.floor(
-            (now - this.lastTimeAccumulated) / 1000
+            (now - this.lastTimeAccumulated) / 1000,
           );
           if (elapsedSeconds > 0) {
             this.unsyncedLocalSeconds += elapsedSeconds;
@@ -105,25 +110,25 @@ export class HeartbeatManager {
     vscode.window.onDidChangeActiveTextEditor(
       this.handleActiveEditorChange,
       null,
-      this.context.subscriptions
+      this.context.subscriptions,
     );
 
     vscode.workspace.onDidChangeTextDocument(
       this.handleDocumentChange,
       null,
-      this.context.subscriptions
+      this.context.subscriptions,
     );
 
     vscode.workspace.onDidSaveTextDocument(
       this.handleDocumentSave,
       null,
-      this.context.subscriptions
+      this.context.subscriptions,
     );
 
     vscode.window.onDidChangeWindowState(
       this.handleWindowStateChange,
       null,
-      this.context.subscriptions
+      this.context.subscriptions,
     );
 
     if (vscode.window.activeTextEditor) {
@@ -139,11 +144,11 @@ export class HeartbeatManager {
   }
 
   private handleActiveEditorChange = (
-    editor: vscode.TextEditor | undefined
+    editor: vscode.TextEditor | undefined,
   ): void => {
     if (editor) {
       log(
-        `Editor changed: ${editor.document.uri.fsPath} (${editor.document.languageId})`
+        `Editor changed: ${editor.document.uri.fsPath} (${editor.document.languageId})`,
       );
       this.activeDocumentInfo = {
         file: path.basename(editor.document.uri.fsPath),
@@ -155,7 +160,7 @@ export class HeartbeatManager {
   };
 
   private handleDocumentChange = (
-    event: vscode.TextDocumentChangeEvent
+    event: vscode.TextDocumentChangeEvent,
   ): void => {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document === event.document) {
@@ -195,8 +200,8 @@ export class HeartbeatManager {
       this.lastActivity = Date.now();
       log(
         `Window focused, activity timer reset at ${new Date(
-          this.lastActivity
-        ).toLocaleTimeString()}`
+          this.lastActivity,
+        ).toLocaleTimeString()}`,
       );
       if (this.statusBar) {
         this.statusBar.startTracking();
@@ -207,7 +212,7 @@ export class HeartbeatManager {
 
   private scheduleHeartbeat(): void {
     log(
-      `Setting up heartbeat schedule with interval: ${this.heartbeatInterval}ms and inactivity threshold: ${this.userInactivityThresholdMilliseconds}ms`
+      `Setting up heartbeat schedule with interval: ${this.heartbeatInterval}ms and inactivity threshold: ${this.userInactivityThresholdMilliseconds}ms`,
     );
     setInterval(() => {
       const now = Date.now();
@@ -223,29 +228,73 @@ export class HeartbeatManager {
         const reason = !this.activeDocumentInfo
           ? "no active document"
           : !this.isWindowFocused
-          ? "window not focused"
-          : "user inactive";
+            ? "window not focused"
+            : "user inactive";
         log(
           `Skipping heartbeat (${reason}). Focused: ${
             this.isWindowFocused
           }, SufficientlyRecentInteraction: ${
             now - this.lastActivity < this.userInactivityThresholdMilliseconds
-          }, ActiveDoc: ${!!this.activeDocumentInfo}`
+          }, ActiveDoc: ${!!this.activeDocumentInfo}`,
         );
         if (this.statusBar) {
           this.statusBar.stopTracking();
         }
       }
     }, this.heartbeatInterval);
-    setInterval(() => {
-      this.fetchDailySummary();
-      log(
-        `Heartbeat stats - Total: ${this.heartbeatCount}, Success: ${this.successCount}, Failed: ${this.failureCount}, Offline: ${this.offlineHeartbeats.length}`
-      );
-    }, 15 * 60 * 1000);
+    setInterval(
+      () => {
+        this.fetchDailySummary();
+        log(
+          `Heartbeat stats - Total: ${this.heartbeatCount}, Success: ${this.successCount}, Failed: ${this.failureCount}, Offline: ${this.offlineHeartbeats.length}`,
+        );
+      },
+      15 * 60 * 1000,
+    );
   }
 
-  public async fetchDailySummary(): Promise<void> {
+  private migrateOfflineHeartbeats(): void {
+    try {
+      const legacyOfflinePath = path.join(
+        os.homedir(),
+        ".ziit",
+        "offline_heartbeats.json",
+      );
+
+      if (
+        fs.existsSync(legacyOfflinePath) &&
+        !fs.existsSync(this.offlineQueuePath)
+      ) {
+        const legacyData = fs.readFileSync(legacyOfflinePath, "utf8");
+        fs.writeFileSync(this.offlineQueuePath, legacyData, "utf8");
+        fs.unlinkSync(legacyOfflinePath);
+        log(
+          `Migrated offline heartbeats from ${legacyOfflinePath} to ${this.offlineQueuePath}`,
+        );
+
+        try {
+          const legacyDir = path.dirname(legacyOfflinePath);
+          const dirContents = fs.readdirSync(legacyDir);
+          if (dirContents.length === 0) {
+            fs.rmdirSync(legacyDir);
+            log(`Removed empty legacy directory: ${legacyDir}`);
+          }
+        } catch (cleanupError) {
+          log(
+            `Could not remove legacy directory: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+          );
+        }
+      }
+    } catch (error) {
+      log(
+        `Error migrating offline heartbeats: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async fetchDailySummary(): Promise<void> {
     const apiKey = await getApiKey();
     const baseUrl = await getBaseUrl();
     if (!apiKey || !baseUrl) {
@@ -259,7 +308,7 @@ export class HeartbeatManager {
       const timezoneOffsetSeconds = timezoneOffsetMinutes * 60;
       url.searchParams.append(
         "midnightOffsetSeconds",
-        timezoneOffsetSeconds.toString()
+        timezoneOffsetSeconds.toString(),
       );
       url.searchParams.append("t", Date.now().toString());
       const requestOptions = {
@@ -328,7 +377,7 @@ export class HeartbeatManager {
   private async syncOfflineHeartbeats(): Promise<void> {
     log(
       "Syncing offline heartbeats to the contected ziit instance: " +
-        (await getBaseUrl())
+        (await getBaseUrl()),
     );
 
     if (!this.isOnline || this.offlineHeartbeats.length === 0) return;
@@ -380,12 +429,12 @@ export class HeartbeatManager {
               } else if (res.statusCode === 401) {
                 this.setApiKeyStatus(false);
                 reject(
-                  new Error(`Invalid API key (status code: ${res.statusCode})`)
+                  new Error(`Invalid API key (status code: ${res.statusCode})`),
                 );
               } else {
                 reject(new Error(`Failed with status code: ${res.statusCode}`));
               }
-            }
+            },
           );
 
           req.on("error", (err) => {
@@ -405,7 +454,7 @@ export class HeartbeatManager {
         log(
           `Error syncing offline heartbeats batch: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
         this.offlineHeartbeats = [...batch, ...this.offlineHeartbeats];
         this.saveOfflineHeartbeats();
@@ -478,8 +527,8 @@ export class HeartbeatManager {
         process.platform === "win32"
           ? "Windows"
           : process.platform === "darwin"
-          ? "macOS"
-          : "Linux",
+            ? "macOS"
+            : "Linux",
     };
     if (!this.isOnline) {
       this.offlineHeartbeats.push(heartbeat);
@@ -514,19 +563,19 @@ export class HeartbeatManager {
               this.setApiKeyStatus(true);
               this.unsyncedLocalSeconds = 0;
               log(
-                `Heartbeat sent successfully for ${heartbeat.file} (${heartbeat.language}) in project ${heartbeat.project}`
+                `Heartbeat sent successfully for ${heartbeat.file} (${heartbeat.language}) in project ${heartbeat.project}`,
               );
               resolve();
             } else if (res.statusCode === 401) {
               this.setApiKeyStatus(false);
               reject(
-                new Error(`Invalid API key (status code: ${res.statusCode})`)
+                new Error(`Invalid API key (status code: ${res.statusCode})`),
               );
             } else {
               this.failureCount++;
               reject(new Error(`Failed with status code: ${res.statusCode}`));
             }
-          }
+          },
         );
         req.on("error", (err) => {
           this.failureCount++;
@@ -547,7 +596,7 @@ export class HeartbeatManager {
       log(
         `Failed to send heartbeat: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
     }
   }
@@ -562,7 +611,7 @@ export class HeartbeatManager {
       log(
         `Error loading offline heartbeats: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
       this.offlineHeartbeats = [];
     }
@@ -573,13 +622,13 @@ export class HeartbeatManager {
       fs.writeFileSync(
         this.offlineQueuePath,
         JSON.stringify(this.offlineHeartbeats),
-        "utf8"
+        "utf8",
       );
     } catch (error) {
       log(
         `Error saving offline heartbeats: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
     }
   }
@@ -606,24 +655,24 @@ export class HeartbeatManager {
                   new Error(
                     `Invalid JSON response: ${
                       error instanceof Error ? error.message : String(error)
-                    }`
-                  )
+                    }`,
+                  ),
                 );
               }
             } else if (res.statusCode === 401) {
               this.setApiKeyStatus(false);
               reject(
-                new Error(`Invalid API key (status code: ${res.statusCode})`)
+                new Error(`Invalid API key (status code: ${res.statusCode})`),
               );
             } else {
               reject(
                 new Error(
-                  `Request failed with status code ${res.statusCode}: ${data}`
-                )
+                  `Request failed with status code ${res.statusCode}: ${data}`,
+                ),
               );
             }
           });
-        }
+        },
       );
       req.on("error", (error) => {
         this.setOnlineStatus(false);
@@ -634,7 +683,7 @@ export class HeartbeatManager {
   }
 
   private async getProjectName(
-    fileUri: vscode.Uri
+    fileUri: vscode.Uri,
   ): Promise<string | undefined> {
     try {
       const gitExtension = vscode.extensions.getExtension<{
@@ -663,7 +712,7 @@ export class HeartbeatManager {
       }
 
       log(
-        `Found repository for file ${fileUri.fsPath}: ${repository.rootUri.fsPath}`
+        `Found repository for file ${fileUri.fsPath}: ${repository.rootUri.fsPath}`,
       );
       const remotes = repository.state.remotes;
 
@@ -671,7 +720,7 @@ export class HeartbeatManager {
         try {
           const lastSeparator = Math.max(
             url.lastIndexOf("/"),
-            url.lastIndexOf(":")
+            url.lastIndexOf(":"),
           );
           if (lastSeparator === -1) return undefined;
           let name = url.substring(lastSeparator + 1);
@@ -695,7 +744,7 @@ export class HeartbeatManager {
 
       if (remotes.length > 0) {
         const originRemote = remotes.find(
-          (remote: any) => remote.name === "origin"
+          (remote: any) => remote.name === "origin",
         );
         const remoteToUse = originRemote || remotes[0];
         const remoteUrl = remoteToUse.fetchUrl || remoteToUse.pushUrl;
@@ -713,18 +762,18 @@ export class HeartbeatManager {
       log(
         `Error getting project name from Git: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
       return this.getProjectNameFromWorkspaceFolder(fileUri);
     }
   }
 
   private getProjectNameFromWorkspaceFolder(
-    fileUri: vscode.Uri
+    fileUri: vscode.Uri,
   ): string | undefined {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
     log(
-      `Falling back to workspace folder name for ${fileUri.fsPath}. Found: ${workspaceFolder?.name}`
+      `Falling back to workspace folder name for ${fileUri.fsPath}. Found: ${workspaceFolder?.name}`,
     );
     return workspaceFolder?.name;
   }
