@@ -92,7 +92,7 @@
   },
   "devDependencies": {
     "@types/node": "24.9.2",
-    "@types/vscode": "1.105.0",
+    "@types/vscode": "1.93.0",
     "esbuild": "0.25.11"
   },
   "repository": {
