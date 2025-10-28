@@ -294,7 +294,7 @@ export class HeartbeatManager {
     }
   }
 
-  private async fetchDailySummary(): Promise<void> {
+  public async fetchDailySummary(): Promise<void> {
     const apiKey = await getApiKey();
     const baseUrl = await getBaseUrl();
     if (!apiKey || !baseUrl) {
@@ -537,7 +537,7 @@ export class HeartbeatManager {
     }
     try {
       const data = JSON.stringify(heartbeat);
-      const url = new URL(`${baseUrl}/api/external/heartbeats`);
+      const url = new URL(`${baseUrl}/api/external/heartbeat`);
       const requestOptions = {
         hostname: url.hostname,
         port: url.port || (url.protocol === "https:" ? 443 : 80),
