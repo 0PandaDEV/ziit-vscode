@@ -305,7 +305,7 @@ export class HeartbeatManager {
       url.searchParams.append("timeRange", "today");
       const now = new Date();
       const timezoneOffsetMinutes = now.getTimezoneOffset();
-      const timezoneOffsetSeconds = timezoneOffsetMinutes * 60;
+      const timezoneOffsetSeconds = timezoneOffsetMinutes * 60 * -1;
       url.searchParams.append(
         "midnightOffsetSeconds",
         timezoneOffsetSeconds.toString(),
