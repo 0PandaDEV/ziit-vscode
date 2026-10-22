@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { log } from "./log";
+import { log, describeError } from "./log";
 import * as https from "https";
 import * as http from "http";
 import * as fs from "fs";
@@ -22,7 +22,9 @@ export class HeartbeatManager {
   private lastHeartbeat: number = 0;
   private lastFile: string = "";
   private heartbeatInterval: number = 120000;
-  private userInactivityThresholdMilliseconds: number = 15 * 60 * 1000;
+  private userInactivityThresholdMilliseconds: number = 5 * 60 * 1000;
+  private trailingFlushDelayMilliseconds: number = 30 * 1000;
+  private pendingActivity: boolean = false;
   private activeDocumentInfo: { file: string; language: string } | null = null;
   private statusBar: StatusBarManager | null = null;
   private heartbeatCount: number = 0;
@@ -125,6 +127,18 @@ export class HeartbeatManager {
       this.context.subscriptions,
     );
 
+    vscode.window.onDidChangeTextEditorSelection(
+      this.handleSelectionChange,
+      null,
+      this.context.subscriptions,
+    );
+
+    vscode.window.onDidChangeTextEditorVisibleRanges(
+      this.handleVisibleRangesChange,
+      null,
+      this.context.subscriptions,
+    );
+
     vscode.window.onDidChangeWindowState(
       this.handleWindowStateChange,
       null,
@@ -138,9 +152,31 @@ export class HeartbeatManager {
 
   private recordUserInteraction(): void {
     this.lastActivity = Date.now();
+    this.pendingActivity = true;
     if (this.statusBar && this.isWindowFocused) {
       this.statusBar.startTracking();
     }
+  }
+
+  private registerActivity(force: boolean = false): void {
+    this.recordUserInteraction();
+    const activeEditor = vscode.window.activeTextEditor;
+    const fileChanged =
+      !!activeEditor && this.lastFile !== activeEditor.document.uri.fsPath;
+    const timeThresholdPassed =
+      this.lastActivity - this.lastHeartbeat >= this.heartbeatInterval;
+    if (force || fileChanged || timeThresholdPassed) {
+      this.pendingActivity = false;
+      this.sendHeartbeat(true).then(() => this.fetchDailySummary());
+    }
+  }
+
+  private flushPendingActivity(): void {
+    if (!this.pendingActivity || !this.activeDocumentInfo) return;
+    this.pendingActivity = false;
+    this.sendHeartbeat(true, this.lastActivity).then(() =>
+      this.fetchDailySummary(),
+    );
   }
 
   private handleActiveEditorChange = (
@@ -154,36 +190,49 @@ export class HeartbeatManager {
         file: path.basename(editor.document.uri.fsPath),
         language: editor.document.languageId,
       };
-      this.recordUserInteraction();
-      this.sendHeartbeat(true).then(() => this.fetchDailySummary());
+      if (this.isWindowFocused) {
+        this.registerActivity(true);
+      }
     }
   };
 
   private handleDocumentChange = (
     event: vscode.TextDocumentChangeEvent,
   ): void => {
+    if (!this.isWindowFocused) return;
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document === event.document) {
       this.activeDocumentInfo = {
         file: path.basename(event.document.uri.fsPath),
         language: event.document.languageId,
       };
-      this.recordUserInteraction();
-      const now = Date.now();
-      const fileChanged = this.lastFile !== event.document.uri.fsPath;
-      const timeThresholdPassed =
-        now - this.lastHeartbeat >= this.heartbeatInterval;
-      if (fileChanged || timeThresholdPassed) {
-        this.sendHeartbeat().then(() => this.fetchDailySummary());
-      }
+      this.registerActivity();
     }
   };
 
   private handleDocumentSave = (document: vscode.TextDocument): void => {
+    if (!this.isWindowFocused) return;
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document === document) {
-      this.recordUserInteraction();
-      this.sendHeartbeat(true).then(() => this.fetchDailySummary());
+      this.registerActivity(true);
+    }
+  };
+
+  private handleSelectionChange = (
+    event: vscode.TextEditorSelectionChangeEvent,
+  ): void => {
+    if (!this.isWindowFocused) return;
+    if (event.textEditor === vscode.window.activeTextEditor) {
+      this.registerActivity();
+    }
+  };
+
+  private handleVisibleRangesChange = (
+    event: vscode.TextEditorVisibleRangesChangeEvent,
+  ): void => {
+    if (!this.isWindowFocused) return;
+    if (event.textEditor === vscode.window.activeTextEditor) {
+      this.registerActivity();
     }
   };
 
@@ -192,6 +241,7 @@ export class HeartbeatManager {
     this.isWindowFocused = windowState.focused;
     log(`Window focus state changed: ${wasFocused} -> ${this.isWindowFocused}`);
     if (!this.isWindowFocused && wasFocused) {
+      this.flushPendingActivity();
       if (this.statusBar) {
         this.statusBar.stopTracking();
       }
@@ -212,36 +262,25 @@ export class HeartbeatManager {
 
   private scheduleHeartbeat(): void {
     log(
-      `Setting up heartbeat schedule with interval: ${this.heartbeatInterval}ms and inactivity threshold: ${this.userInactivityThresholdMilliseconds}ms`,
+      `Setting up activity flush with throttle ${this.heartbeatInterval}ms, flush delay ${this.trailingFlushDelayMilliseconds}ms and inactivity threshold ${this.userInactivityThresholdMilliseconds}ms`,
     );
     setInterval(() => {
       const now = Date.now();
-      const userIsEffectivelyActive =
+      const idleFor = now - this.lastActivity;
+      if (
         this.isWindowFocused &&
-        now - this.lastActivity < this.userInactivityThresholdMilliseconds;
-      if (this.activeDocumentInfo && userIsEffectivelyActive) {
-        this.sendHeartbeat().then(() => this.fetchDailySummary());
-        if (this.statusBar && this.isWindowFocused) {
-          this.statusBar.startTracking();
-        }
-      } else {
-        const reason = !this.activeDocumentInfo
-          ? "no active document"
-          : !this.isWindowFocused
-            ? "window not focused"
-            : "user inactive";
-        log(
-          `Skipping heartbeat (${reason}). Focused: ${
-            this.isWindowFocused
-          }, SufficientlyRecentInteraction: ${
-            now - this.lastActivity < this.userInactivityThresholdMilliseconds
-          }, ActiveDoc: ${!!this.activeDocumentInfo}`,
-        );
-        if (this.statusBar) {
-          this.statusBar.stopTracking();
-        }
+        idleFor >= this.trailingFlushDelayMilliseconds
+      ) {
+        this.flushPendingActivity();
       }
-    }, this.heartbeatInterval);
+      if (
+        this.statusBar &&
+        (!this.isWindowFocused ||
+          idleFor >= this.userInactivityThresholdMilliseconds)
+      ) {
+        this.statusBar.stopTracking();
+      }
+    }, 15 * 1000);
     setInterval(
       () => {
         this.fetchDailySummary();
@@ -359,7 +398,7 @@ export class HeartbeatManager {
         log(`Error fetching daily summary: Invalid API key`);
       } else {
         this.setOnlineStatus(false);
-        log(`Error fetching daily summary: ${error}`);
+        log(`Error fetching daily summary: ${describeError(error)}`);
       }
       if (
         this.statusBar &&
@@ -452,9 +491,7 @@ export class HeartbeatManager {
         this.unsyncedLocalSeconds = 0;
       } catch (error) {
         log(
-          `Error syncing offline heartbeats batch: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Error syncing offline heartbeats batch: ${describeError(error)}`,
         );
         this.offlineHeartbeats = [...batch, ...this.offlineHeartbeats];
         this.saveOfflineHeartbeats();
@@ -492,7 +529,10 @@ export class HeartbeatManager {
     }
   }
 
-  private async sendHeartbeat(force: boolean = false): Promise<void> {
+  private async sendHeartbeat(
+    force: boolean = false,
+    timestampMs?: number,
+  ): Promise<void> {
     const activeEditor = vscode.window.activeTextEditor;
     if (!activeEditor || !this.activeDocumentInfo) return;
     const now = Date.now();
@@ -503,7 +543,7 @@ export class HeartbeatManager {
       return;
     }
     this.lastFile = activeEditor.document.uri.fsPath;
-    this.lastHeartbeat = now;
+    this.lastHeartbeat = timestampMs ?? now;
     this.heartbeatCount++;
     const project = await this.getProjectName(activeEditor.document.uri);
     if (!project) {
@@ -517,7 +557,7 @@ export class HeartbeatManager {
     }
     const branch = await this.getGitBranch();
     const heartbeat: Heartbeat = {
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(timestampMs ?? now).toISOString(),
       project,
       language: this.activeDocumentInfo.language,
       file: this.activeDocumentInfo.file,
@@ -594,9 +634,7 @@ export class HeartbeatManager {
       this.offlineHeartbeats.push(heartbeat);
       this.saveOfflineHeartbeats();
       log(
-        `Failed to send heartbeat: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Failed to send heartbeat: ${describeError(error)}`,
       );
     }
   }
