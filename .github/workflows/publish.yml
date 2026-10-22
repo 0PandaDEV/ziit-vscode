@@ -5,6 +5,23 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release
+        required: true
+      base:
+        description: Previous tag or ref to compare from (defaults to the previous tag)
+        required: false
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -13,7 +30,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
+          ref: refs/tags/${{ env.TAG }}
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -74,3 +91,40 @@ jobs:
       
       - name: Publish to Open VSX Registry
         run: npx ovsx publish *.vsix -p ${{ secrets.OVSX_PAT }}
+
+  release:
+    name: Release
+    needs: [publish-vscode, publish-ovsx]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download VSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: extension
+
+      - name: Changelog
+        id: changelog
+        uses: 0PandaDEV/changelog@main
+        with:
+          head: ${{ env.TAG }}
+          base: ${{ github.event.inputs.base }}
+          step-summary: "true"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NOTES: ${{ steps.changelog.outputs.markdown }}
+        run: |
+          flags=()
+          if [[ "$TAG" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes "$NOTES" "${flags[@]}"
+            gh release upload "$TAG" *.vsix --clobber
+          else
+            gh release create "$TAG" *.vsix --verify-tag --title "$TAG" --notes "$NOTES" "${flags[@]}"
+          fi
