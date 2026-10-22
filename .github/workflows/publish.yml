@@ -73,7 +73,7 @@ jobs:
         run: npm install -g @vscode/vsce
       
       - name: Publish to VS Code Marketplace
-        run: vsce publish -p ${{ secrets.VSCE_PAT }} --packagePath *.vsix
+        run: vsce publish -p ${{ secrets.VSCE_PAT }} --packagePath *.vsix --skip-duplicate
   
   publish-ovsx:
     needs: build
@@ -90,7 +90,7 @@ jobs:
           node-version: '20'
       
       - name: Publish to Open VSX Registry
-        run: npx ovsx publish *.vsix -p ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish *.vsix -p ${{ secrets.OVSX_PAT }} --skip-duplicate
 
   release:
     name: Release
